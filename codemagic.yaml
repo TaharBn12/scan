@@ -1,0 +1,16 @@
+﻿workflows:
+  android-workflow:
+    name: Android Build
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      - name: Generate code
+        script: dart run build_runner build --delete-conflicting-outputs
+      - name: Build APK
+        script: flutter build apk --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
