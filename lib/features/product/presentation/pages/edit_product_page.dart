@@ -55,7 +55,7 @@ class _EditProductPageState extends State<EditProductPage> {
                 size: 32, color: Theme.of(context).primaryColor),
             onPressed: () => context.pop(),
           ),
-          title: const Text('تعديل المنتج',
+          title: const Text('Edit Product',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           centerTitle: true,
         ),
@@ -85,7 +85,7 @@ class _EditProductPageState extends State<EditProductPage> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('الباركود',
+                            Text('BARCODE',
                                 style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -103,7 +103,7 @@ class _EditProductPageState extends State<EditProductPage> {
                     ),
                   ),
 
-                  const InputLabel(text: 'اسم المنتج'),
+                  const InputLabel(text: 'Product Name'),
 
                   TextFormField(
                     initialValue: _name,
@@ -113,14 +113,14 @@ class _EditProductPageState extends State<EditProductPage> {
                   ),
                   const SizedBox(height: 24),
 
-                  const InputLabel(text: 'السعر'),
+                  const InputLabel(text: 'Price'),
 
                   TextFormField(
                     initialValue: _price.toStringAsFixed(2),
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
-                       prefixText: 'DA ',
+                      prefixText: '₹ ',
                       prefixStyle: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -137,7 +137,7 @@ class _EditProductPageState extends State<EditProductPage> {
         bottomNavigationBar: PrimaryButton(
           onPressed: _submit,
           icon: Icons.save,
-          label: 'حفظ التغييرات',
+          label: 'Save Changes',
         ));
   }
 }

@@ -35,15 +35,9 @@ class MyApp extends StatelessWidget {
             create: (context) => di.sl<PrinterBloc>()..add(InitPrinterEvent())),
       ],
       child: MaterialApp.router(
-        title: 'نقطة البيع',
+        title: 'Billing App',
         theme: AppTheme.lightTheme,
         routerConfig: router,
-        locale: const Locale('ar'),
-        supportedLocales: const [Locale('ar')],
-        builder: (context, child) => Directionality(
-          textDirection: TextDirection.rtl,
-          child: child!,
-        ),
         debugShowCheckedModeBanner: false,
       ),
     );

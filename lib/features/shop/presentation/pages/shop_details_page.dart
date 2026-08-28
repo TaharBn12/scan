@@ -79,7 +79,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: const Text('بيانات المحل'),
+          title: const Text('Shop Details'),
         ),
         body: BlocConsumer<ShopBloc, ShopState>(
           listener: (context, state) {
@@ -87,7 +87,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
               _updateControllers(state.shop);
             } else if (state is ShopOperationSuccess) {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('تم حفظ بيانات المحل'),
+                  content: Text('Shop details saved!'),
                   backgroundColor: Colors.green));
               context.pop();
             } else if (state is ShopError) {
@@ -109,7 +109,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('المعلومات العامة',
+                    Text('General Information',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -124,27 +124,27 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                       style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                     const SizedBox(height: 24),
-                    const InputLabel(text: 'اسم المحل'),
+                    const InputLabel(text: 'Shop Name'),
                     _buildTextField(
                       controller: _nameController,
                       hint: 'e.g. QuickMart Superstore',
                       validator: AppValidators.required('Required'),
                     ),
                     const SizedBox(height: 15),
-                    const InputLabel(text: 'العنوان الأول'),
+                    const InputLabel(text: 'Address Line 1'),
                     _buildTextField(
                       controller: _address1Controller,
                       hint: 'Samrajpet, Mecheri',
                       validator: AppValidators.required('Required'),
                     ),
                     const SizedBox(height: 15),
-                    const InputLabel(text: 'العنوان الثاني (اختياري)'),
+                    const InputLabel(text: 'Address Line 2 (Optional)'),
                     _buildTextField(
                       controller: _address2Controller,
                       hint: 'Salem - 636453',
                     ),
                     const SizedBox(height: 15),
-                    const InputLabel(text: 'رقم الهاتف'),
+                    const InputLabel(text: 'Phone Number'),
                     _buildTextField(
                       controller: _phoneController,
                       hint: '+91 7010674588',
@@ -152,7 +152,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                       validator: AppValidators.required('Required'),
                     ),
                     const SizedBox(height: 15),
-                    const InputLabel(text: 'معرّف الدفع'),
+                    const InputLabel(text: 'UPI ID'),
                     _buildTextField(
                       controller: _upiController,
                       hint: 'dineshsowndar@oksbi',
@@ -161,8 +161,8 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const InputLabel(text: 'نص أسفل الفاتورة'),
-                        Text('الحد الأقصى 150 حرفًا',
+                        const InputLabel(text: 'Receipt Footer Text'),
+                        Text('Max 150 chars',
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey[400])),
                       ],
@@ -182,7 +182,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
         bottomNavigationBar: PrimaryButton(
           onPressed: _saveShop,
           icon: Icons.save,
-          label: 'حفظ البيانات',
+          label: 'Save Details',
         ));
   }
 

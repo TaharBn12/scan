@@ -116,7 +116,7 @@ class _HomePageState extends State<HomePage> {
                   if (_isCameraOn && mounted) _scannerController.start();
                 },
           icon: Icons.payment,
-            label: 'مراجعة الفاتورة',
+          label: 'Review Order',
         );
       }),
     );
@@ -222,7 +222,7 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 16),
           const Text(
-              'الكاميرا متوقفة',
+            'Camera is turned off',
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
           ),
@@ -230,7 +230,7 @@ class _HomePageState extends State<HomePage> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 32),
             child: Text(
-                'شغّل الكاميرا لبدء مسح الباركود والمنتجات تلقائيًا.',
+              'Turn on your camera to start scanning barcodes and items automatically.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white70, fontSize: 12),
             ),
@@ -245,7 +245,7 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             icon: const Icon(Icons.videocam),
-            label: const Text('تشغيل الكاميرا',
+            label: const Text('Turn on Camera',
                 style: TextStyle(fontWeight: FontWeight.bold)),
             onPressed: () {
               setState(() => _isCameraOn = true);
@@ -342,10 +342,10 @@ class _HomePageState extends State<HomePage> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('المنتجات الممسوحة',
+                        const Text('Scanned Items',
                             style: TextStyle(
                                 fontSize: 18, fontWeight: FontWeight.w600)),
-                         Text('$totalItems منتجًا',
+                        Text('$totalItems items total',
                             style: const TextStyle(
                                 fontSize: 12, color: Colors.grey)),
                       ],
@@ -353,14 +353,14 @@ class _HomePageState extends State<HomePage> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('الإجمالي',
+                        const Text('TOTAL PRICE',
                             style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey,
                                 letterSpacing: 1.2)),
                         Text(
-                            'DA${state.totalAmount.toStringAsFixed(2)}',
+                          'DA${state.totalAmount.toStringAsFixed(2)}',
                           style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
@@ -421,13 +421,13 @@ class _HomePageState extends State<HomePage> {
                 Icon(Icons.shopping_basket, size: 40, color: Colors.grey[300]),
           ),
           const SizedBox(height: 16),
-          const Text('القائمة فارغة',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const Text('List is empty',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 8),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-                'ستظهر المنتجات هنا أثناء مسحها بالكاميرا.',
+              'Scanned items will appear here as you scan them with the camera above.',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
@@ -468,7 +468,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'DA${item.product.price.toStringAsFixed(2)}',
+                  '₹${item.product.price.toStringAsFixed(2)}',
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,

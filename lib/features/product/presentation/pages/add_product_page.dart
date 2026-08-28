@@ -73,7 +73,7 @@ class _AddProductPageState extends State<AddProductPage> {
                 size: 28, color: Theme.of(context).primaryColor),
             onPressed: () => context.pop(),
           ),
-          title: const Text('إضافة منتج',
+          title: const Text('Add Product',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           centerTitle: true,
         ),
@@ -85,7 +85,7 @@ class _AddProductPageState extends State<AddProductPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const InputLabel(text: 'الباركود'),
+                  const InputLabel(text: 'Barcode'),
                   Row(
                     children: [
                       Expanded(
@@ -93,7 +93,7 @@ class _AddProductPageState extends State<AddProductPage> {
                           key: ValueKey(_barcode),
                           initialValue: _barcode,
                           decoration: const InputDecoration(
-                             hintText: 'امسح الباركود أو أدخله',
+                            hintText: 'Scan or enter barcode',
                           ),
                           validator:
                               AppValidators.required('Please enter a barcode'),
@@ -116,26 +116,26 @@ class _AddProductPageState extends State<AddProductPage> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Text('اضغط على الأيقونة لفتح ماسح الكاميرا',
+                  const Text('Tap the icon to open camera scanner',
                       style: TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
                   const SizedBox(height: 24),
-                  const InputLabel(text: 'اسم المنتج'),
+                  const InputLabel(text: 'Product Name'),
                   TextFormField(
                     decoration: const InputDecoration(
-                      hintText: 'مثال: أرز بسمتي',
+                      hintText: 'e.g. Basmati Rice',
                     ),
                     textCapitalization: TextCapitalization.words,
                     validator: AppValidators.required('Please enter a name'),
                     onSaved: (value) => _name = value!,
                   ),
                   const SizedBox(height: 24),
-                  const InputLabel(text: 'السعر'),
+                  const InputLabel(text: 'Price'),
                   TextFormField(
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
                       hintText: '0.00',
-                      prefixText: 'DA ',
+                      prefixText: '₹ ',
                       prefixStyle: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -152,7 +152,7 @@ class _AddProductPageState extends State<AddProductPage> {
         bottomNavigationBar: PrimaryButton(
           onPressed: _submit,
           icon: Icons.add_circle,
-          label: 'إضافة المنتج',
+          label: 'Add Product',
         ));
   }
 }
