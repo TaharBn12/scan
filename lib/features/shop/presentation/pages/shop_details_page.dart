@@ -95,21 +95,11 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                   content: Text(state.message), backgroundColor: Colors.red));
             }
           },
+          buildWhen: (previous, current) =>
+              current is ShopLoading || current is ShopLoaded,
           builder: (context, state) {
             if (state is ShopLoading) {
               return const Center(child: CircularProgressIndicator());
-            }
-
-            if (state is ShopError) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    'تعذر تحميل بيانات المحل: ${state.message}',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              );
             }
 
             return SingleChildScrollView(
