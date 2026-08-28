@@ -36,7 +36,16 @@ final router = GoRouter(
       routes: [
         GoRoute(
           path: 'add',
-          builder: (context, state) => const AddProductPage(),
+          builder: (context, state) {
+            final extra = state.extra;
+            if (extra is Map<String, dynamic>) {
+              return AddProductPage(
+                initialBarcode: extra['barcode'] as String?,
+                returnToCart: extra['returnToCart'] == true,
+              );
+            }
+            return const AddProductPage();
+          },
         ),
         GoRoute(
           path: 'edit/:id',

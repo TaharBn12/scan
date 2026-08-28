@@ -11,7 +11,14 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
 
 class AddProductPage extends StatefulWidget {
-  const AddProductPage({super.key});
+  final String? initialBarcode;
+  final bool returnToCart;
+
+  const AddProductPage({
+    super.key,
+    this.initialBarcode,
+    this.returnToCart = false,
+  });
 
   @override
   State<AddProductPage> createState() => _AddProductPageState();
@@ -22,6 +29,13 @@ class _AddProductPageState extends State<AddProductPage> {
   String _name = '';
   String _barcode = '';
   double _price = 0.0;
+  int _quantity = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _barcode = widget.initialBarcode ?? '';
+  }
 
   void _scanBarcode() async {
     final result = await context.push<String>('/scanner');
@@ -40,7 +54,7 @@ class _AddProductPageState extends State<AddProductPage> {
       final existingProduct =
           productState.products.where((p) => p.barcode == _barcode).firstOrNull;
 
-      if (existingProduct != null) {
+      if (_barcode.isNotEmpty && existingProduct != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Product with barcode "$_barcode" already exists!'),
@@ -55,10 +69,15 @@ class _AddProductPageState extends State<AddProductPage> {
         name: _name,
         barcode: _barcode,
         price: _price,
+        stock: _quantity,
       );
 
       context.read<ProductBloc>().add(AddProduct(product));
-      context.pop();
+      if (widget.returnToCart) {
+        context.pop({'product': product, 'quantity': _quantity});
+      } else {
+        context.pop();
+      }
     }
   }
 
@@ -95,8 +114,7 @@ class _AddProductPageState extends State<AddProductPage> {
                           decoration: const InputDecoration(
                              hintText: 'امسح الباركود أو أدخله',
                           ),
-                          validator:
-                              AppValidators.required('Please enter a barcode'),
+                          validator: (_) => null,
                           onSaved: (value) => _barcode = value!,
                         ),
                       ),
@@ -125,7 +143,7 @@ class _AddProductPageState extends State<AddProductPage> {
                       hintText: 'مثال: أرز بسمتي',
                     ),
                     textCapitalization: TextCapitalization.words,
-                    validator: AppValidators.required('Please enter a name'),
+                    validator: AppValidators.required('أدخل اسم المنتج'),
                     onSaved: (value) => _name = value!,
                   ),
                   const SizedBox(height: 24),
@@ -143,6 +161,23 @@ class _AddProductPageState extends State<AddProductPage> {
                     ),
                     validator: AppValidators.price,
                     onSaved: (value) => _price = double.parse(value!),
+                  ),
+                  const SizedBox(height: 24),
+                  const InputLabel(text: 'الكمية'),
+                  TextFormField(
+                    initialValue: '1',
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '1',
+                    ),
+                    validator: (value) {
+                      final quantity = int.tryParse(value ?? '');
+                      if (quantity == null || quantity < 1) {
+                        return 'أدخل كمية صحيحة أكبر من صفر';
+                      }
+                      return null;
+                    },
+                    onSaved: (value) => _quantity = int.parse(value!),
                   ),
                 ],
               ),

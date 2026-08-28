@@ -87,8 +87,6 @@ class _ProductListPageState extends State<ProductListPage> {
                               color: Colors.grey[400],
                             ),
                           ),
-                          validator:
-                              AppValidators.required('Please enter a barcode'),
                         ),
                       ),
                       const SizedBox(width: 12),
