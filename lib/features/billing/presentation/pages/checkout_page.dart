@@ -104,11 +104,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                       ),
                                       children: [
                                         _buildHeaderCell(
-                                            'اسم المنتج', TextAlign.left),
+                                            'Product Name', TextAlign.left),
                                         _buildHeaderCell(
-                                            'السعر', TextAlign.right),
+                                            'Price', TextAlign.right),
                                         _buildHeaderCell(
-                                            'اجمالي', TextAlign.right),
+                                            'Total', TextAlign.right),
                                       ],
                                     ),
                                     // Items rows
@@ -120,11 +120,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                             TextAlign.left,
                                           ),
                                           _buildDataCell(
-                                              'DA${item.product.price.toStringAsFixed(2)}',
+                                              '₹${item.product.price.toStringAsFixed(2)}',
                                               TextAlign.right,
                                               isSubtitle: true),
                                           _buildDataCell(
-                                              'DA${item.total.toStringAsFixed(2)}',
+                                              '₹${item.total.toStringAsFixed(2)}',
                                               TextAlign.right,
                                               isBold: true),
                                         ],
@@ -200,7 +200,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      'السعر الجمالي',
+                                      'GRAND TOTAL',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
@@ -209,7 +209,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                       ),
                                     ),
                                     Text(
-                                      'DA${billingState.totalAmount.toStringAsFixed(2)}',
+                                      '₹${billingState.totalAmount.toStringAsFixed(2)}',
                                       style: const TextStyle(
                                         fontSize: 24,
                                         fontWeight: FontWeight.bold,
