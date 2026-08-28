@@ -20,6 +20,7 @@ class _ProductListPageState extends State<ProductListPage> {
   @override
   void initState() {
     super.initState();
+    context.read<ProductBloc>().add(LoadProducts());
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.toLowerCase();
