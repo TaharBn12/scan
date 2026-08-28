@@ -60,7 +60,7 @@ class _ProductListPageState extends State<ProductListPage> {
               size: 28, color: Theme.of(context).primaryColor),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Product Management',
+        title: const Text('إدارة المنتجات',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: true,
       ),
@@ -81,7 +81,7 @@ class _ProductListPageState extends State<ProductListPage> {
                           controller: _searchController,
                           textCapitalization: TextCapitalization.words,
                           decoration: InputDecoration(
-                            hintText: 'Scan or enter barcode',
+                            hintText: 'امسح الباركود أو أدخله',
                             prefixIcon: Icon(
                               Icons.search,
                               color: Colors.grey[400],
@@ -107,7 +107,7 @@ class _ProductListPageState extends State<ProductListPage> {
                     ],
                   ),
                   const SizedBox(height: 6),
-                  const Text('Tap the icon to open camera scanner',
+                  const Text('اضغط على الأيقونة لفتح ماسح الكاميرا',
                       style: TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
                 ],
               );
@@ -141,10 +141,10 @@ class _ProductListPageState extends State<ProductListPage> {
 
                 if (state.products.isEmpty) {
                   if (state.status == ProductStatus.error) {
-                    return Center(child: Text('Error: ${state.message}'));
+                    return Center(child: Text('خطأ: ${state.message}'));
                   }
                   return const Center(
-                      child: Text('No products found. Add some!'));
+                       child: Text('لا توجد منتجات. أضف منتجًا جديدًا.'));
                 }
 
                 final filteredProducts = state.products
@@ -155,7 +155,7 @@ class _ProductListPageState extends State<ProductListPage> {
 
                 if (filteredProducts.isEmpty) {
                   return const Center(
-                      child: Text('No products match your search.'));
+                       child: Text('لا توجد منتجات مطابقة للبحث.'));
                 }
 
                 return ListView.separated(
@@ -194,7 +194,7 @@ class _ProductListPageState extends State<ProductListPage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '₹${product.price.toStringAsFixed(2)}',
+                                   'DA${product.price.toStringAsFixed(2)}',
                                   style: TextStyle(
                                       fontWeight: FontWeight.w500,
                                       color: Colors.grey[600]),
@@ -264,19 +264,19 @@ class _ProductListPageState extends State<ProductListPage> {
       context: context,
       builder: (innerContext) {
         return AlertDialog(
-          title: const Text('Delete Product'),
-          content: Text('Are you sure you want to delete ${product.name}?'),
+          title: const Text('حذف المنتج'),
+          content: Text('هل تريد حذف ${product.name}؟'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(innerContext),
-              child: const Text('Cancel'),
+              child: const Text('إلغاء'),
             ),
             TextButton(
               onPressed: () {
                 context.read<ProductBloc>().add(DeleteProduct(product.id));
                 Navigator.pop(innerContext);
               },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+               child: const Text('حذف', style: TextStyle(color: Colors.red)),
             ),
           ],
         );

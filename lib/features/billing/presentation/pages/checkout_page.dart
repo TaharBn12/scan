@@ -2,10 +2,11 @@ import 'package:billing_app/core/widgets/primary_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pretty_qr_code/pretty_qr_code.dart';
 
 import '../../../shop/presentation/bloc/shop_bloc.dart';
 import '../bloc/billing_bloc.dart';
+import '../../../settings/presentation/bloc/printer_bloc.dart';
+import '../../../settings/presentation/bloc/printer_event.dart';
 
 class CheckoutPage extends StatefulWidget {
   const CheckoutPage({super.key});
@@ -28,7 +29,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         },
         child: Scaffold(
           appBar: AppBar(
-            title: const Text('Checkout',
+            title: const Text('الفاتورة',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             centerTitle: true,
             backgroundColor: Colors.transparent,
@@ -46,7 +47,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
             listener: (context, state) {
               if (state.printSuccess) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Printed successfully'),
+                    content: Text('تمت طباعة الفاتورة بنجاح'),
                     backgroundColor: Colors.green));
                 // context.read<BillingBloc>().add(ClearCartEvent());
                 // context.go('/');
@@ -55,14 +56,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
             builder: (context, billingState) {
               return BlocBuilder<ShopBloc, ShopState>(
                   builder: (context, shopState) {
-                String upiId = '';
-                String shopName = 'Shop';
-
-                if (shopState is ShopLoaded) {
-                  upiId = shopState.shop.upiId;
-                  shopName = shopState.shop.name;
-                }
-
                 return Column(
                   children: [
                     Expanded(
@@ -170,37 +163,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                 const SizedBox(
                                   height: 8,
                                 ),
-                                upiId.isNotEmpty
-                                    ? Column(
-                                        children: [
-                                          const Text(
-                                            'Scan to Pay',
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black87,
-                                              letterSpacing: 1.1,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 12),
-                                          SizedBox(
-                                            width: 180,
-                                            height: 180,
-                                            child: PrettyQrView.data(
-                                              data:
-                                                  'upi://pay?pa=$upiId&pn=$shopName&am=${billingState.totalAmount.toStringAsFixed(2)}&cu=INR',
-                                            ),
-                                          ),
-                                        ],
-                                      )
-                                    : const SizedBox.shrink(),
-                                const SizedBox(height: 15),
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
                                     Text(
-                                      'السعر الجمالي',
+                                      'الإجمالي',
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
@@ -223,24 +191,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             ),
                           ),
                           PrimaryButton(
-                            onPressed: () {
-                              if (shopState is ShopLoaded) {
-                                context.read<BillingBloc>().add(
-                                    PrintReceiptEvent(
-                                        shopName: shopState.shop.name,
-                                        address1: shopState.shop.addressLine1,
-                                        address2: shopState.shop.addressLine2,
-                                        phone: shopState.shop.phoneNumber,
-                                        footer: shopState.shop.footerText));
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                            Text('Shop details not loaded'),
-                                        backgroundColor: Colors.red));
-                              }
-                            },
-                            label: 'Print Receipt',
+                            onPressed: () => _showPrinterOptions(
+                                context, shopState),
+                            label: 'خيارات الطابعة',
                             icon: Icons.print,
                             isLoading: billingState.isPrinting,
                           ),
@@ -253,6 +206,50 @@ class _CheckoutPageState extends State<CheckoutPage> {
             },
           ),
         ));
+  }
+
+  void _showPrinterOptions(BuildContext context, ShopState shopState) {
+    if (shopState is! ShopLoaded) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('لم يتم تحميل بيانات المحل'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.receipt_long),
+              title: const Text('طباعة الفاتورة'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context.read<BillingBloc>().add(PrintReceiptEvent(
+                    shopName: shopState.shop.name,
+                    address1: shopState.shop.addressLine1,
+                    address2: shopState.shop.addressLine2,
+                    phone: shopState.shop.phoneNumber,
+                    footer: shopState.shop.footerText));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.print_outlined),
+              title: const Text('اختبار الطابعة'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context
+                    .read<PrinterBloc>()
+                    .add(TestPrintEvent(shopState.shop.name));
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeaderCell(String text, TextAlign align) {
