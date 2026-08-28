@@ -105,7 +105,7 @@ class _ScannerPageState extends State<ScannerPage> {
             left: 0,
             right: 0,
             child: Text(
-              'ضع الباركود داخل الإطار',
+              'Align barcode within frame',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white, fontSize: 16),
             ),

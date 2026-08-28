@@ -5,8 +5,6 @@ import 'package:vibration/vibration.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../billing/presentation/bloc/billing_bloc.dart';
-import '../../../product/presentation/bloc/product_bloc.dart';
-import '../../../product/domain/entities/product.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/primary_button.dart';
 import '../../domain/entities/cart_item.dart';
@@ -60,34 +58,8 @@ class _HomePageState extends State<HomePage> {
           Vibration.vibrate();
         }
 
-        if (!mounted) return;
-
-        final products = context.read<ProductBloc>().state.products;
-        final matchedProduct = products
-            .where((product) => product.barcode == rawValue)
-            .firstOrNull;
-
-        if (matchedProduct != null) {
-          context
-              .read<BillingBloc>()
-              .add(AddProductToCartEvent(matchedProduct));
-        } else {
-          _scannerController.stop();
-          final result = await context.push<dynamic>('/products/add', extra: {
-            'barcode': rawValue,
-            'returnToCart': true,
-          });
-          if (_isCameraOn && mounted) {
-            _scannerController.start();
-          }
-          if (result is Map && result['product'] is Product) {
-            final product = result['product'] as Product;
-            final quantity = result['quantity'] as int? ?? 1;
-            context.read<BillingBloc>().add(AddProductToCartEvent(product));
-            context
-                .read<BillingBloc>()
-                .add(UpdateQuantityEvent(product.id, quantity));
-          }
+        if (mounted) {
+          context.read<BillingBloc>().add(ScanBarcodeEvent(rawValue));
         }
         break; // Process one barcode at a time per frame
       }
