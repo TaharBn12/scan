@@ -55,3 +55,26 @@ class PrintReceiptEvent extends BillingEvent {
   @override
   List<Object> get props => [shopName, address1, address2, phone, footer];
 }
+
+class SetDiscountEvent extends BillingEvent {
+  final double value;
+  final bool isPercent;
+  const SetDiscountEvent({required this.value, required this.isPercent});
+  @override
+  List<Object> get props => [value, isPercent];
+}
+
+class SetPaymentMethodEvent extends BillingEvent {
+  final PaymentMethod method;
+  const SetPaymentMethodEvent(this.method);
+  @override
+  List<Object> get props => [method];
+}
+
+class SetCustomerInfoEvent extends BillingEvent {
+  final String name;
+  final String phone;
+  const SetCustomerInfoEvent({this.name = '', this.phone = ''});
+  @override
+  List<Object> get props => [name, phone];
+}

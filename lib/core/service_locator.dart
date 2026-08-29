@@ -10,6 +10,10 @@ import '../../features/shop/presentation/bloc/shop_bloc.dart';
 import '../../features/settings/data/repositories/printer_repository_impl.dart';
 import '../../features/settings/domain/repositories/printer_repository.dart';
 import '../../features/settings/presentation/bloc/printer_bloc.dart';
+import '../../features/sales/data/repositories/sale_repository_impl.dart';
+import '../../features/sales/domain/repositories/sale_repository.dart';
+import '../../features/sales/domain/usecases/sale_usecases.dart';
+import '../../features/sales/presentation/bloc/sale_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -63,5 +67,20 @@ Future<void> init() async {
   // Features - Settings / Printer
   sl.registerLazySingleton<PrinterRepository>(
     () => PrinterRepositoryImpl(),
+  );
+
+  // Features - Sales
+  sl.registerFactory(
+    () => SaleBloc(
+      getSalesUseCase: sl(),
+      addSaleUseCase: sl(),
+      deleteSaleUseCase: sl(),
+    ),
+  );
+  sl.registerLazySingleton(() => GetSalesUseCase(sl()));
+  sl.registerLazySingleton(() => AddSaleUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteSaleUseCase(sl()));
+  sl.registerLazySingleton<SaleRepository>(
+    () => SaleRepositoryImpl(),
   );
 }

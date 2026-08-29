@@ -23,6 +23,7 @@ class _AddProductPageState extends State<AddProductPage> {
   String _name = '';
   String _barcode = '';
   double _price = 0.0;
+  int _stock = 0;
   late bool _hasBarcode;
 
   @override
@@ -67,6 +68,7 @@ class _AddProductPageState extends State<AddProductPage> {
         name: _name,
         barcode: _hasBarcode ? _barcode : '',
         price: _price,
+        stock: _stock,
         hasBarcode: _hasBarcode,
       );
 
@@ -191,6 +193,31 @@ class _AddProductPageState extends State<AddProductPage> {
                     validator: AppValidators.price,
                     onSaved: (value) => _price = double.parse(value!),
                   ),
+                  const SizedBox(height: 24),
+                  const InputLabel(text: 'Initial Stock (optional)'),
+                  TextFormField(
+                    initialValue: '0',
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      hintText: '0',
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return null;
+                      if (int.tryParse(value) == null) {
+                        return 'Please enter a whole number';
+                      }
+                      if (int.parse(value) < 0) return 'Cannot be negative';
+                      return null;
+                    },
+                    onSaved: (value) =>
+                        _stock = (value == null || value.trim().isEmpty)
+                            ? 0
+                            : int.parse(value),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                      'Leave at 0 if you don\'t want to track stock for this product',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
                 ],
               ),
             ),

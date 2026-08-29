@@ -201,11 +201,36 @@ class _ProductListPageState extends State<ProductListPage> {
                                       fontSize: 16),
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  'DA${product.price.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.grey[600]),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'DA${product.price.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.grey[600]),
+                                    ),
+                                    if (product.stock > 0 &&
+                                        product.stock <= 5) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange
+                                              .withValues(alpha: 0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'Low stock: ${product.stock}',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.orange),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),

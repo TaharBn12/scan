@@ -1,0 +1,387 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+
+import '../bloc/sale_bloc.dart';
+import '../../domain/entities/sale.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../billing/domain/entities/payment_method.dart';
+
+class ReportsPage extends StatefulWidget {
+  const ReportsPage({super.key});
+
+  @override
+  State<ReportsPage> createState() => _ReportsPageState();
+}
+
+class _ReportsPageState extends State<ReportsPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.chevron_left,
+              size: 28, color: Theme.of(context).primaryColor),
+          onPressed: () => context.pop(),
+        ),
+        title: const Text('Reports',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: AppTheme.primaryColor,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: AppTheme.primaryColor,
+          tabs: const [
+            Tab(text: 'Overview'),
+            Tab(text: 'History'),
+          ],
+        ),
+      ),
+      body: BlocBuilder<SaleBloc, SaleState>(
+        builder: (context, state) {
+          if (state.status == SaleStatus.loading && state.sales.isEmpty) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _OverviewTab(state: state),
+              _HistoryTab(sales: state.sales),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _OverviewTab extends StatelessWidget {
+  final SaleState state;
+  const _OverviewTab({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.sales.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.bar_chart, size: 40, color: Colors.grey[300]),
+              const SizedBox(height: 12),
+              const Text(
+                'No sales recorded yet.\nComplete a checkout to see reports here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: _StatCard(
+                      label: 'Today', value: state.todayTotal, sub: '${state.todayCount} sales')),
+              const SizedBox(width: 12),
+              Expanded(
+                  child: _StatCard(label: 'This Week', value: state.weekTotal)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _StatCard(label: 'This Month', value: state.monthTotal, wide: true),
+          const SizedBox(height: 24),
+          const Text('Top Products',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 12),
+          if (state.topProducts.isEmpty)
+            const Text('No product data yet.',
+                style: TextStyle(color: Colors.grey))
+          else
+            _TopProductsChart(entries: state.topProducts),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final double value;
+  final String? sub;
+  final bool wide;
+  const _StatCard(
+      {required this.label, required this.value, this.sub, this.wide = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: wide ? double.infinity : null,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                  color: AppTheme.primaryColor.withValues(alpha: 0.7))),
+          const SizedBox(height: 6),
+          Text('DA${value.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          if (sub != null) ...[
+            const SizedBox(height: 2),
+            Text(sub!, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TopProductsChart extends StatelessWidget {
+  final List<MapEntry<String, int>> entries;
+  const _TopProductsChart({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final maxQty = entries.first.value;
+    return Column(
+      children: entries.map((e) {
+        final fraction = maxQty == 0 ? 0.0 : e.value / maxQty;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                      child: Text(e.key,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w500))),
+                  Text('${e.value} sold',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  minHeight: 8,
+                  backgroundColor: Colors.grey[200],
+                  valueColor:
+                      const AlwaysStoppedAnimation(AppTheme.primaryColor),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class _HistoryTab extends StatelessWidget {
+  final List<Sale> sales;
+  const _HistoryTab({required this.sales});
+
+  @override
+  Widget build(BuildContext context) {
+    if (sales.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.receipt_long, size: 40, color: Colors.grey[300]),
+              const SizedBox(height: 12),
+              const Text('No past invoices yet.',
+                  style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: sales.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final sale = sales[index];
+        return InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _showSaleDetail(context, sale),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey[100]!),
+              boxShadow: const [
+                BoxShadow(
+                    color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.receipt,
+                      color: AppTheme.primaryColor, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          DateFormat('dd MMM yyyy, hh:mm a')
+                              .format(sale.dateTime),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13)),
+                      const SizedBox(height: 2),
+                      Text(
+                          '${sale.totalItemsCount} item(s) · ${sale.paymentMethod.label}'
+                          '${sale.customerName != null && sale.customerName!.isNotEmpty ? ' · ${sale.customerName}' : ''}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey[600])),
+                    ],
+                  ),
+                ),
+                Text('DA${sale.total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSaleDetail(BuildContext context, Sale sale) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.4,
+          expand: false,
+          builder: (context, scrollController) {
+            return Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      DateFormat('dd MMM yyyy, hh:mm a').format(sale.dateTime),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 4),
+                  Text('${sale.paymentMethod.label}'
+                      '${sale.customerName != null && sale.customerName!.isNotEmpty ? ' · ${sale.customerName}' : ''}',
+                      style: TextStyle(color: Colors.grey[600])),
+                  const Divider(height: 24),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: sale.items.length,
+                      itemBuilder: (context, i) {
+                        final item = sale.items[i];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                  child: Text(
+                                      '${item.quantity} x ${item.productName}')),
+                              Text('DA${item.lineTotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  if (sale.discountAmount > 0) ...[
+                    _summaryRow('Subtotal', sale.subtotal),
+                    _summaryRow('Discount', -sale.discountAmount,
+                        color: Colors.orange),
+                  ],
+                  _summaryRow('Total', sale.total, bold: true),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _summaryRow(String label, double value,
+      {bool bold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
+          Text('DA${value.toStringAsFixed(2)}',
+              style: TextStyle(
+                  fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+                  color: color)),
+        ],
+      ),
+    );
+  }
+}

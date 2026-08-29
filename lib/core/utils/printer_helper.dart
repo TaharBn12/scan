@@ -111,6 +111,9 @@ class PrinterHelper {
     required List<Map<String, dynamic>> items, // Name, Qty, Price, Total
     required double total,
     required String footer,
+    double subtotal = 0,
+    double discount = 0,
+    String? paymentMethod,
   }) async {
     if (!_isConnected) return;
 
@@ -175,12 +178,25 @@ class PrinterHelper {
     bytes += _textToBytes('--------------------------------');
     bytes += EscPos.lineFeed;
 
-    // Total (Align Right)
+    // Subtotal / Discount (only if a discount was applied)
     bytes += EscPos.alignRight;
+    if (discount > 0) {
+      bytes += _textToBytes('Subtotal: ${subtotal.toStringAsFixed(2)}');
+      bytes += EscPos.lineFeed;
+      bytes += _textToBytes('Discount: -${discount.toStringAsFixed(2)}');
+      bytes += EscPos.lineFeed;
+    }
+
+    // Total (Align Right)
     bytes += EscPos.boldOn;
-    bytes += _textToBytes('TOTAL: $total');
+    bytes += _textToBytes('TOTAL: ${total.toStringAsFixed(2)}');
     bytes += EscPos.lineFeed;
     bytes += EscPos.boldOff;
+
+    if (paymentMethod != null && paymentMethod.isNotEmpty) {
+      bytes += _textToBytes('Paid via: $paymentMethod');
+      bytes += EscPos.lineFeed;
+    }
     bytes += EscPos.lineFeed;
 
     // Footer (Center)

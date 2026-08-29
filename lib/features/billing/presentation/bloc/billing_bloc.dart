@@ -1,6 +1,7 @@
 import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/cart_item.dart';
+import '../../domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/product/domain/usecases/product_usecases.dart';
 import '../../../../core/utils/printer_helper.dart';
@@ -20,6 +21,12 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     on<UpdateQuantityEvent>(_onUpdateQuantity);
     on<ClearCartEvent>(_onClearCart);
     on<PrintReceiptEvent>(_onPrintReceipt);
+    on<SetDiscountEvent>((event, emit) => emit(state.copyWith(
+        discountValue: event.value, discountIsPercent: event.isPercent)));
+    on<SetPaymentMethodEvent>(
+        (event, emit) => emit(state.copyWith(paymentMethod: event.method)));
+    on<SetCustomerInfoEvent>((event, emit) => emit(state.copyWith(
+        customerName: event.name, customerPhone: event.phone)));
   }
 
   Future<void> _onScanBarcode(
@@ -125,6 +132,9 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
           phone: event.phone,
           items: items,
           total: state.totalAmount,
+          subtotal: state.subtotal,
+          discount: state.discountAmount,
+          paymentMethod: state.paymentMethod.label,
           footer: event.footer);
 
       emit(state.copyWith(isPrinting: false, printSuccess: true));

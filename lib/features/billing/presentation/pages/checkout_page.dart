@@ -3,8 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pretty_qr_code/pretty_qr_code.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../shop/presentation/bloc/shop_bloc.dart';
+import '../../../product/domain/entities/product.dart';
+import '../../../product/presentation/bloc/product_bloc.dart';
+import '../../../sales/domain/entities/sale.dart';
+import '../../../sales/domain/entities/sale_item.dart';
+import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../domain/entities/payment_method.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../bloc/billing_bloc.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -15,6 +23,71 @@ class CheckoutPage extends StatefulWidget {
 }
 
 class _CheckoutPageState extends State<CheckoutPage> {
+  final TextEditingController _discountController = TextEditingController();
+  final TextEditingController _customerNameController =
+      TextEditingController();
+  final TextEditingController _customerPhoneController =
+      TextEditingController();
+
+  // Guards against recording the sale / decrementing stock twice if the
+  // merchant reprints the same receipt.
+  bool _saleFinalized = false;
+
+  @override
+  void dispose() {
+    _discountController.dispose();
+    _customerNameController.dispose();
+    _customerPhoneController.dispose();
+    super.dispose();
+  }
+
+  void _finalizeSale(BuildContext context, BillingState billingState) {
+    if (_saleFinalized || billingState.cartItems.isEmpty) return;
+    _saleFinalized = true;
+
+    final sale = Sale(
+      id: const Uuid().v4(),
+      dateTime: DateTime.now(),
+      items: billingState.cartItems
+          .map((c) => SaleItem(
+                productId: c.product.id,
+                productName: c.product.name,
+                unitPrice: c.product.price,
+                quantity: c.quantity,
+              ))
+          .toList(),
+      subtotal: billingState.subtotal,
+      discountAmount: billingState.discountAmount,
+      total: billingState.totalAmount,
+      paymentMethod: billingState.paymentMethod,
+      customerName: (billingState.customerName ?? '').trim().isNotEmpty
+          ? billingState.customerName!.trim()
+          : null,
+      customerPhone: (billingState.customerPhone ?? '').trim().isNotEmpty
+          ? billingState.customerPhone!.trim()
+          : null,
+    );
+
+    context.read<SaleBloc>().add(AddSale(sale));
+
+    // Decrement stock for tracked products. stock == 0 is treated as
+    // "not tracked" (see AddProductPage), so we leave those untouched.
+    final productBloc = context.read<ProductBloc>();
+    for (final item in billingState.cartItems) {
+      if (item.product.stock > 0) {
+        final remaining = item.product.stock - item.quantity;
+        productBloc.add(UpdateProduct(Product(
+          id: item.product.id,
+          name: item.product.name,
+          barcode: item.product.barcode,
+          price: item.product.price,
+          stock: remaining < 0 ? 0 : remaining,
+          hasBarcode: item.product.hasBarcode,
+        )));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const borderColor = Color(0xFFE5E5EA);
@@ -48,6 +121,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                     content: Text('Printed successfully'),
                     backgroundColor: Colors.green));
+                _finalizeSale(context, state);
                 // context.read<BillingBloc>().add(ClearCartEvent());
                 // context.go('/');
               }
@@ -134,7 +208,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 16),
+                            _buildDiscountSection(context, billingState),
+                            const SizedBox(height: 16),
+                            _buildPaymentMethodSection(context, billingState),
+                            const SizedBox(height: 16),
+                            _buildCustomerSection(context),
 
                             const SizedBox(
                                 height: 120), // padding for bottom fixed bar
@@ -195,6 +274,40 @@ class _CheckoutPageState extends State<CheckoutPage> {
                                       )
                                     : const SizedBox.shrink(),
                                 const SizedBox(height: 15),
+                                if (billingState.discountAmount > 0) ...[
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Subtotal',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[500])),
+                                      Text(
+                                          'DA${billingState.subtotal.toStringAsFixed(2)}',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600])),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text('Discount',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.orange)),
+                                      Text(
+                                          '-DA${billingState.discountAmount.toStringAsFixed(2)}',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.orange)),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
                                 Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
@@ -253,6 +366,131 @@ class _CheckoutPageState extends State<CheckoutPage> {
             },
           ),
         ));
+  }
+
+  Widget _buildDiscountSection(BuildContext context, BillingState state) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E5EA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Discount (optional)',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _discountController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(hintText: '0'),
+                  onChanged: (value) {
+                    final parsed = double.tryParse(value) ?? 0;
+                    context.read<BillingBloc>().add(SetDiscountEvent(
+                        value: parsed, isPercent: state.discountIsPercent));
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('DA')),
+                  ButtonSegment(value: true, label: Text('%')),
+                ],
+                selected: {state.discountIsPercent},
+                onSelectionChanged: (selection) {
+                  context.read<BillingBloc>().add(SetDiscountEvent(
+                      value: state.discountValue,
+                      isPercent: selection.first));
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPaymentMethodSection(BuildContext context, BillingState state) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E5EA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Payment Method',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: PaymentMethod.values.map((method) {
+              final selected = state.paymentMethod == method;
+              return ChoiceChip(
+                label: Text(method.label),
+                selected: selected,
+                onSelected: (_) => context
+                    .read<BillingBloc>()
+                    .add(SetPaymentMethodEvent(method)),
+                selectedColor: AppTheme.primaryColor.withValues(alpha: 0.15),
+                labelStyle: TextStyle(
+                    color:
+                        selected ? AppTheme.primaryColor : Colors.black87,
+                    fontWeight:
+                        selected ? FontWeight.bold : FontWeight.normal),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerSection(BuildContext context) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE5E5EA)),
+        ),
+        child: ExpansionTile(
+          title: const Text('Customer (optional)',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          children: [
+            TextField(
+              controller: _customerNameController,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(hintText: 'Name'),
+              onChanged: (value) => context.read<BillingBloc>().add(
+                  SetCustomerInfoEvent(
+                      name: value, phone: _customerPhoneController.text)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customerPhoneController,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(hintText: 'Phone'),
+              onChanged: (value) => context.read<BillingBloc>().add(
+                  SetCustomerInfoEvent(
+                      name: _customerNameController.text, phone: value)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildHeaderCell(String text, TextAlign align) {
