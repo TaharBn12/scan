@@ -20,6 +20,9 @@ class ProductModel extends Product {
   @override
   @HiveField(4)
   final int stock;
+  @override
+  @HiveField(5)
+  final bool hasBarcode;
 
   const ProductModel({
     required this.id,
@@ -27,12 +30,14 @@ class ProductModel extends Product {
     required this.barcode,
     required this.price,
     required this.stock,
+    this.hasBarcode = true,
   }) : super(
           id: id,
           name: name,
           barcode: barcode,
           price: price,
           stock: stock,
+          hasBarcode: hasBarcode,
         );
 
   factory ProductModel.fromEntity(Product product) {
@@ -42,6 +47,7 @@ class ProductModel extends Product {
       barcode: product.barcode,
       price: product.price,
       stock: product.stock,
+      hasBarcode: product.hasBarcode,
     );
   }
 
@@ -52,6 +58,7 @@ class ProductModel extends Product {
       barcode: barcode,
       price: price,
       stock: stock,
+      hasBarcode: hasBarcode,
     );
   }
 }

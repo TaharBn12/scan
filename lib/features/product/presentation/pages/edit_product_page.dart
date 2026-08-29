@@ -38,6 +38,7 @@ class _EditProductPageState extends State<EditProductPage> {
         name: _name,
         barcode: widget.product.barcode,
         price: _price,
+        hasBarcode: widget.product.hasBarcode,
       );
 
       context.read<ProductBloc>().add(UpdateProduct(updatedProduct));
@@ -79,8 +80,12 @@ class _EditProductPageState extends State<EditProductPage> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.qr_code_scanner,
-                            color: AppTheme.primaryColor, size: 28),
+                        Icon(
+                            widget.product.hasBarcode
+                                ? Icons.qr_code_scanner
+                                : Icons.inventory_2_outlined,
+                            color: AppTheme.primaryColor,
+                            size: 28),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +97,10 @@ class _EditProductPageState extends State<EditProductPage> {
                                     color: AppTheme.primaryColor
                                         .withValues(alpha: 0.7))),
                             const SizedBox(height: 2),
-                            Text(widget.product.barcode,
+                            Text(
+                                widget.product.hasBarcode
+                                    ? widget.product.barcode
+                                    : 'No barcode (manual item)',
                                 style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,

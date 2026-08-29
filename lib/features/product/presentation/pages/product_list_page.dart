@@ -63,6 +63,14 @@ class _ProductListPageState extends State<ProductListPage> {
         title: const Text('Product Management',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.inventory_2_outlined,
+                color: Theme.of(context).primaryColor),
+            tooltip: 'No-barcode products',
+            onPressed: () => context.push('/products/no-barcode'),
+          ),
+        ],
       ),
       body: Column(
         children: [

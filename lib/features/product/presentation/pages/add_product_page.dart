@@ -11,7 +11,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
 
 class AddProductPage extends StatefulWidget {
-  const AddProductPage({super.key});
+  final bool startWithoutBarcode;
+  const AddProductPage({super.key, this.startWithoutBarcode = false});
 
   @override
   State<AddProductPage> createState() => _AddProductPageState();
@@ -22,6 +23,13 @@ class _AddProductPageState extends State<AddProductPage> {
   String _name = '';
   String _barcode = '';
   double _price = 0.0;
+  late bool _hasBarcode;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasBarcode = !widget.startWithoutBarcode;
+  }
 
   void _scanBarcode() async {
     final result = await context.push<String>('/scanner');
@@ -36,25 +44,30 @@ class _AddProductPageState extends State<AddProductPage> {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
 
-      final productState = context.read<ProductBloc>().state;
-      final existingProduct =
-          productState.products.where((p) => p.barcode == _barcode).firstOrNull;
+      if (_hasBarcode) {
+        final productState = context.read<ProductBloc>().state;
+        final existingProduct = productState.products
+            .where((p) => p.hasBarcode && p.barcode == _barcode)
+            .firstOrNull;
 
-      if (existingProduct != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Product with barcode "$_barcode" already exists!'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
+        if (existingProduct != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text('Product with barcode "$_barcode" already exists!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
       }
 
       final product = Product(
         id: const Uuid().v4(),
         name: _name,
-        barcode: _barcode,
+        barcode: _hasBarcode ? _barcode : '',
         price: _price,
+        hasBarcode: _hasBarcode,
       );
 
       context.read<ProductBloc>().add(AddProduct(product));
@@ -85,40 +98,74 @@ class _AddProductPageState extends State<AddProductPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const InputLabel(text: 'Barcode'),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          key: ValueKey(_barcode),
-                          initialValue: _barcode,
-                          decoration: const InputDecoration(
-                            hintText: 'Scan or enter barcode',
-                          ),
-                          validator:
-                              AppValidators.required('Please enter a barcode'),
-                          onSaved: (value) => _barcode = value!,
-                        ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color:
+                              AppTheme.primaryColor.withValues(alpha: 0.1)),
+                    ),
+                    child: SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      activeThumbColor: AppTheme.primaryColor,
+                      title: const Text('Product has a barcode',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 14)),
+                      subtitle: const Text(
+                        'Turn off for loose/manual items (e.g. produce)',
+                        style: TextStyle(fontSize: 12),
                       ),
-                      const SizedBox(width: 12),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.qr_code_scanner,
-                              color: AppTheme.primaryColor),
-                          onPressed: _scanBarcode,
-                          padding: const EdgeInsets.all(14),
-                        ),
-                      ),
-                    ],
+                      value: _hasBarcode,
+                      onChanged: (value) {
+                        setState(() {
+                          _hasBarcode = value;
+                          if (!_hasBarcode) _barcode = '';
+                        });
+                      },
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  const Text('Tap the icon to open camera scanner',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
                   const SizedBox(height: 24),
+                  if (_hasBarcode) ...[
+                    const InputLabel(text: 'Barcode'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            key: ValueKey(_barcode),
+                            initialValue: _barcode,
+                            decoration: const InputDecoration(
+                              hintText: 'Scan or enter barcode',
+                            ),
+                            validator: AppValidators.required(
+                                'Please enter a barcode'),
+                            onSaved: (value) => _barcode = value!,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          decoration: BoxDecoration(
+                            color:
+                                AppTheme.primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.qr_code_scanner,
+                                color: AppTheme.primaryColor),
+                            onPressed: _scanBarcode,
+                            padding: const EdgeInsets.all(14),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text('Tap the icon to open camera scanner',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                    const SizedBox(height: 24),
+                  ],
                   const InputLabel(text: 'Product Name'),
                   TextFormField(
                     decoration: const InputDecoration(

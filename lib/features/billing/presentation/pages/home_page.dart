@@ -149,6 +149,15 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 const SizedBox(height: 16),
+                _buildOverlayButton(
+                  icon: Icons.inventory_2_outlined,
+                  onPressed: () async {
+                    _scannerController.stop();
+                    await context.push('/no-barcode');
+                    if (_isCameraOn && mounted) _scannerController.start();
+                  },
+                ),
+                const SizedBox(height: 16),
                 if (_isCameraOn)
                   _buildOverlayButton(
                     icon:

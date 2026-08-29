@@ -8,6 +8,7 @@ import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../features/billing/presentation/pages/scanner_page.dart';
 import '../../features/billing/presentation/pages/checkout_page.dart';
 import '../../features/product/domain/entities/product.dart';
+import '../../features/product/presentation/pages/no_barcode_products_page.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -24,6 +25,11 @@ final router = GoRouter(
           path: 'checkout',
           builder: (context, state) => const CheckoutPage(),
         ),
+        GoRoute(
+          path: 'no-barcode',
+          builder: (context, state) =>
+              const NoBarcodeProductsPage(selectionMode: true),
+        ),
       ],
     ),
     GoRoute(
@@ -37,6 +43,16 @@ final router = GoRouter(
         GoRoute(
           path: 'add',
           builder: (context, state) => const AddProductPage(),
+        ),
+        GoRoute(
+          path: 'add-no-barcode',
+          builder: (context, state) =>
+              const AddProductPage(startWithoutBarcode: true),
+        ),
+        GoRoute(
+          path: 'no-barcode',
+          builder: (context, state) =>
+              const NoBarcodeProductsPage(selectionMode: false),
         ),
         GoRoute(
           path: 'edit/:id',
