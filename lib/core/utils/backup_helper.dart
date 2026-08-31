@@ -21,6 +21,9 @@ class BackupHelper {
               'price': p.price,
               'stock': p.stock,
               'hasBarcode': p.hasBarcode,
+              'costPrice': p.costPrice,
+              'category': p.category,
+              'lowStockThreshold': p.lowStockThreshold,
             })
         .toList();
 
@@ -83,6 +86,9 @@ class BackupHelper {
           price: (map['price'] as num?)?.toDouble() ?? 0,
           stock: (map['stock'] as num?)?.toInt() ?? 0,
           hasBarcode: map['hasBarcode'] as bool? ?? true,
+          costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
+          category: map['category'] as String? ?? '',
+          lowStockThreshold: (map['lowStockThreshold'] as num?)?.toInt() ?? 5,
         );
         await HiveDatabase.productBox.put(model.id, model);
         productsImported++;

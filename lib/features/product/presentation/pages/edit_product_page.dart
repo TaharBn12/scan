@@ -21,14 +21,20 @@ class _EditProductPageState extends State<EditProductPage> {
   final _formKey = GlobalKey<FormState>();
   late String _name;
   late double _price;
+  late double _costPrice;
+  late String _category;
   late int _stock;
+  late int _lowStockThreshold;
 
   @override
   void initState() {
     super.initState();
     _name = widget.product.name;
     _price = widget.product.price;
+    _costPrice = widget.product.costPrice;
+    _category = widget.product.category;
     _stock = widget.product.stock;
+    _lowStockThreshold = widget.product.lowStockThreshold;
   }
 
   void _submit() {
@@ -42,11 +48,45 @@ class _EditProductPageState extends State<EditProductPage> {
         price: _price,
         stock: _stock,
         hasBarcode: widget.product.hasBarcode,
+        costPrice: _costPrice,
+        category: _category.trim(),
+        lowStockThreshold: _lowStockThreshold,
       );
 
       context.read<ProductBloc>().add(UpdateProduct(updatedProduct));
       context.pop();
     }
+  }
+
+  Widget _buildCategoryField() {
+    final existingCategories = context
+        .read<ProductBloc>()
+        .state
+        .products
+        .map((p) => p.category)
+        .where((c) => c.trim().isNotEmpty)
+        .toSet()
+        .toList();
+
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: _category),
+      optionsBuilder: (textEditingValue) {
+        if (textEditingValue.text.isEmpty) return existingCategories;
+        return existingCategories.where(
+            (c) => c.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+      },
+      onSelected: (selection) => _category = selection,
+      fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+        return TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration:
+              const InputDecoration(hintText: 'e.g. Beverages, Cleaning...'),
+          onChanged: (value) => _category = value,
+          onSaved: (value) => _category = value ?? '',
+        );
+      },
+    );
   }
 
   @override
@@ -141,6 +181,40 @@ class _EditProductPageState extends State<EditProductPage> {
                     onSaved: (value) => _price = double.parse(value!),
                   ),
                   const SizedBox(height: 24),
+                  const InputLabel(text: 'Cost Price (optional)'),
+                  TextFormField(
+                    initialValue:
+                        _costPrice > 0 ? _costPrice.toStringAsFixed(2) : '',
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      hintText: '0.00',
+                      prefixText: 'DA ',
+                      prefixStyle: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.black),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return null;
+                      if (double.tryParse(value) == null) {
+                        return 'Please enter a valid number';
+                      }
+                      if (double.parse(value) < 0) return 'Cannot be negative';
+                      return null;
+                    },
+                    onSaved: (value) => _costPrice =
+                        (value == null || value.trim().isEmpty)
+                            ? 0
+                            : double.parse(value),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Used to calculate profit in Reports',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                  const SizedBox(height: 24),
+                  const InputLabel(text: 'Category (optional)'),
+                  _buildCategoryField(),
+                  const SizedBox(height: 24),
                   const InputLabel(text: 'Stock (0 = not tracked)'),
                   TextFormField(
                     initialValue: _stock.toString(),
@@ -156,6 +230,24 @@ class _EditProductPageState extends State<EditProductPage> {
                     onSaved: (value) =>
                         _stock = (value == null || value.trim().isEmpty)
                             ? 0
+                            : int.parse(value),
+                  ),
+                  const SizedBox(height: 24),
+                  const InputLabel(text: 'Low Stock Alert Threshold'),
+                  TextFormField(
+                    initialValue: _lowStockThreshold.toString(),
+                    keyboardType: TextInputType.number,
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) return null;
+                      if (int.tryParse(value) == null) {
+                        return 'Please enter a whole number';
+                      }
+                      if (int.parse(value) < 0) return 'Cannot be negative';
+                      return null;
+                    },
+                    onSaved: (value) => _lowStockThreshold =
+                        (value == null || value.trim().isEmpty)
+                            ? 5
                             : int.parse(value),
                   ),
                 ],

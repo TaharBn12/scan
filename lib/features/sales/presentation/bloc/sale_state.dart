@@ -22,9 +22,30 @@ class SaleState extends Equatable {
   double get monthTotal =>
       _totalSince(DateTime(DateTime.now().year, DateTime.now().month, 1));
 
+  double get todayProfit => _profitSince(DateTime(
+      DateTime.now().year, DateTime.now().month, DateTime.now().day));
+
+  double get weekProfit =>
+      _profitSince(DateTime.now().subtract(const Duration(days: 7)));
+
+  double get monthProfit =>
+      _profitSince(DateTime(DateTime.now().year, DateTime.now().month, 1));
+
   double _totalSince(DateTime cutoff) => sales
       .where((s) => s.dateTime.isAfter(cutoff))
       .fold(0.0, (sum, s) => sum + s.total);
+
+  double _profitSince(DateTime cutoff) => sales
+      .where((s) => s.dateTime.isAfter(cutoff))
+      .fold(0.0, (sum, s) => sum + s.profit);
+
+  /// Credit sales that haven't been marked as paid yet.
+  List<Sale> get unpaidCreditSales => sales
+      .where((s) => s.paymentMethod == PaymentMethod.credit && !s.isPaid)
+      .toList();
+
+  double get totalOutstandingCredit =>
+      unpaidCreditSales.fold(0.0, (sum, s) => sum + s.total);
 
   int get todayCount => sales
       .where((s) => s.dateTime.isAfter(DateTime(DateTime.now().year,

@@ -23,6 +23,15 @@ class ProductModel extends Product {
   @override
   @HiveField(5)
   final bool hasBarcode;
+  @override
+  @HiveField(6)
+  final double costPrice;
+  @override
+  @HiveField(7)
+  final String category;
+  @override
+  @HiveField(8)
+  final int lowStockThreshold;
 
   const ProductModel({
     required this.id,
@@ -31,6 +40,9 @@ class ProductModel extends Product {
     required this.price,
     required this.stock,
     this.hasBarcode = true,
+    this.costPrice = 0,
+    this.category = '',
+    this.lowStockThreshold = 5,
   }) : super(
           id: id,
           name: name,
@@ -38,6 +50,9 @@ class ProductModel extends Product {
           price: price,
           stock: stock,
           hasBarcode: hasBarcode,
+          costPrice: costPrice,
+          category: category,
+          lowStockThreshold: lowStockThreshold,
         );
 
   factory ProductModel.fromEntity(Product product) {
@@ -48,6 +63,9 @@ class ProductModel extends Product {
       price: product.price,
       stock: product.stock,
       hasBarcode: product.hasBarcode,
+      costPrice: product.costPrice,
+      category: product.category,
+      lowStockThreshold: product.lowStockThreshold,
     );
   }
 
@@ -59,6 +77,9 @@ class ProductModel extends Product {
       price: price,
       stock: stock,
       hasBarcode: hasBarcode,
+      costPrice: costPrice,
+      category: category,
+      lowStockThreshold: lowStockThreshold,
     );
   }
 }

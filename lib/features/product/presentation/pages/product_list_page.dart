@@ -16,6 +16,7 @@ class ProductListPage extends StatefulWidget {
 class _ProductListPageState extends State<ProductListPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _selectedCategory;
 
   @override
   void initState() {
@@ -117,6 +118,23 @@ class _ProductListPageState extends State<ProductListPage> {
                   const SizedBox(height: 6),
                   const Text('Tap the icon to open camera scanner',
                       style: TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                  if (state.products.any((p) => p.category.trim().isNotEmpty)) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: 34,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _buildCategoryChip(null, 'All'),
+                          ...state.products
+                              .map((p) => p.category)
+                              .where((c) => c.trim().isNotEmpty)
+                              .toSet()
+                              .map((c) => _buildCategoryChip(c, c)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               );
             }),
@@ -159,6 +177,9 @@ class _ProductListPageState extends State<ProductListPage> {
                     .where((product) =>
                         product.name.toLowerCase().contains(_searchQuery) ||
                         product.barcode.toLowerCase().contains(_searchQuery))
+                    .where((product) =>
+                        _selectedCategory == null ||
+                        product.category == _selectedCategory)
                     .toList();
 
                 if (filteredProducts.isEmpty) {
@@ -200,6 +221,13 @@ class _ProductListPageState extends State<ProductListPage> {
                                       fontWeight: FontWeight.w600,
                                       fontSize: 16),
                                 ),
+                                if (product.category.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(product.category,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey[500])),
+                                ],
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
@@ -210,7 +238,8 @@ class _ProductListPageState extends State<ProductListPage> {
                                           color: Colors.grey[600]),
                                     ),
                                     if (product.stock > 0 &&
-                                        product.stock <= 5) ...[
+                                        product.stock <=
+                                            product.lowStockThreshold) ...[
                                       const SizedBox(width: 8),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
@@ -288,6 +317,23 @@ class _ProductListPageState extends State<ProductListPage> {
         foregroundColor: Colors.white,
         shape: const CircleBorder(),
         child: const Icon(Icons.add, size: 32),
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(String? category, String label) {
+    final selected = _selectedCategory == category;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => setState(() => _selectedCategory = category),
+        selectedColor: AppTheme.primaryColor.withValues(alpha: 0.15),
+        labelStyle: TextStyle(
+            fontSize: 12,
+            color: selected ? AppTheme.primaryColor : Colors.black87,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/usecases/sale_usecases.dart';
 import '../../../../core/usecase/usecase.dart';
+import '../../../billing/domain/entities/payment_method.dart';
 
 part 'sale_event.dart';
 part 'sale_state.dart';

@@ -54,6 +54,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 productId: c.product.id,
                 productName: c.product.name,
                 unitPrice: c.product.price,
+                unitCost: c.product.costPrice,
                 quantity: c.quantity,
               ))
           .toList(),
@@ -61,6 +62,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       discountAmount: billingState.discountAmount,
       total: billingState.totalAmount,
       paymentMethod: billingState.paymentMethod,
+      isPaid: billingState.paymentMethod != PaymentMethod.credit,
       customerId: billingState.customerId,
       customerName: (billingState.customerName ?? '').trim().isNotEmpty
           ? billingState.customerName!.trim()
@@ -85,6 +87,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
           price: item.product.price,
           stock: remaining < 0 ? 0 : remaining,
           hasBarcode: item.product.hasBarcode,
+          costPrice: item.product.costPrice,
+          category: item.product.category,
+          lowStockThreshold: item.product.lowStockThreshold,
         )));
       }
     }

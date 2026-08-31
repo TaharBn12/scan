@@ -7,6 +7,7 @@ import '../../domain/entities/customer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
 import '../../../sales/domain/entities/sale.dart';
+import '../../../sales/presentation/pages/reports_page.dart' show showSaleDetailSheet;
 import '../../../billing/domain/entities/payment_method.dart';
 
 class CustomerDetailPage extends StatelessWidget {
@@ -36,7 +37,7 @@ class CustomerDetailPage extends StatelessWidget {
           final totalSpent =
               customerSales.fold(0.0, (sum, s) => sum + s.total);
           final outstandingCredit = customerSales
-              .where((s) => s.paymentMethod == PaymentMethod.credit)
+              .where((s) => s.paymentMethod == PaymentMethod.credit && !s.isPaid)
               .fold(0.0, (sum, s) => sum + s.total);
 
           return ListView(
@@ -91,7 +92,7 @@ class CustomerDetailPage extends StatelessWidget {
                   ),
                 )
               else
-                ...customerSales.map((sale) => _saleTile(sale)),
+                ...customerSales.map((sale) => _saleTile(context, sale)),
             ],
           );
         },
@@ -138,34 +139,48 @@ class CustomerDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _saleTile(Sale sale) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey[100]!),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(DateFormat('dd MMM yyyy, hh:mm a').format(sale.dateTime),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 13)),
-                const SizedBox(height: 2),
-                Text(
-                    '${sale.totalItemsCount} item(s) · ${sale.paymentMethod.label}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              ],
+  Widget _saleTile(BuildContext context, Sale sale) {
+    final isUnpaidCredit =
+        sale.paymentMethod == PaymentMethod.credit && !sale.isPaid;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => showSaleDetailSheet(context, sale),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: isUnpaidCredit
+                  ? Colors.red.withValues(alpha: 0.2)
+                  : Colors.grey[100]!),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(DateFormat('dd MMM yyyy, hh:mm a').format(sale.dateTime),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(
+                      '${sale.totalItemsCount} item(s) · ${sale.paymentMethod.label}'
+                      '${isUnpaidCredit ? ' · UNPAID' : ''}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: isUnpaidCredit
+                              ? Colors.red
+                              : Colors.grey[600])),
+                ],
+              ),
             ),
-          ),
-          Text('DA${sale.total.toStringAsFixed(2)}',
-              style: const TextStyle(fontWeight: FontWeight.bold)),
-        ],
+            Text('DA${sale.total.toStringAsFixed(2)}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
       ),
     );
   }

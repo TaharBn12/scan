@@ -22,16 +22,19 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       barcode: fields[2] as String,
       price: fields[3] as double,
       stock: fields[4] as int,
-      // fields[5] won't exist on records written before this field was
-      // added, so default missing values to true (they all had barcodes).
+      // Fields 5-8 won't exist on records written before they were added,
+      // so we fall back to safe defaults for older data.
       hasBarcode: fields[5] == null ? true : fields[5] as bool,
+      costPrice: fields[6] == null ? 0 : (fields[6] as num).toDouble(),
+      category: fields[7] == null ? '' : fields[7] as String,
+      lowStockThreshold: fields[8] == null ? 5 : fields[8] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, ProductModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -43,7 +46,13 @@ class ProductModelAdapter extends TypeAdapter<ProductModel> {
       ..writeByte(4)
       ..write(obj.stock)
       ..writeByte(5)
-      ..write(obj.hasBarcode);
+      ..write(obj.hasBarcode)
+      ..writeByte(6)
+      ..write(obj.costPrice)
+      ..writeByte(7)
+      ..write(obj.category)
+      ..writeByte(8)
+      ..write(obj.lowStockThreshold);
   }
 
   @override
