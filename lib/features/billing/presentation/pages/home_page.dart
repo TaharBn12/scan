@@ -167,6 +167,15 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 const SizedBox(height: 16),
+                _buildOverlayButton(
+                  icon: Icons.people_outline,
+                  onPressed: () async {
+                    _scannerController.stop();
+                    await context.push('/customers');
+                    if (_isCameraOn && mounted) _scannerController.start();
+                  },
+                ),
+                const SizedBox(height: 16),
                 if (_isCameraOn)
                   _buildOverlayButton(
                     icon:

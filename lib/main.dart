@@ -4,12 +4,14 @@ import 'config/routes/app_routes.dart';
 import 'core/data/hive_database.dart';
 import 'core/service_locator.dart' as di;
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 import 'features/billing/presentation/bloc/billing_bloc.dart';
 import 'features/product/presentation/bloc/product_bloc.dart';
 import 'features/shop/presentation/bloc/shop_bloc.dart';
 import 'features/settings/presentation/bloc/printer_bloc.dart';
 import 'features/settings/presentation/bloc/printer_event.dart';
 import 'features/sales/presentation/bloc/sale_bloc.dart';
+import 'features/customers/presentation/bloc/customer_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,12 +38,21 @@ class MyApp extends StatelessWidget {
             create: (context) => di.sl<PrinterBloc>()..add(InitPrinterEvent())),
         BlocProvider<SaleBloc>(
             create: (context) => di.sl<SaleBloc>()..add(LoadSales())),
+        BlocProvider<CustomerBloc>(
+            create: (context) => di.sl<CustomerBloc>()..add(LoadCustomers())),
       ],
-      child: MaterialApp.router(
-        title: 'Billing App',
-        theme: AppTheme.lightTheme,
-        routerConfig: router,
-        debugShowCheckedModeBanner: false,
+      child: ValueListenableBuilder<ThemeMode>(
+        valueListenable: themeController,
+        builder: (context, mode, _) {
+          return MaterialApp.router(
+            title: 'Billing App',
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: mode,
+            routerConfig: router,
+            debugShowCheckedModeBanner: false,
+          );
+        },
       ),
     );
   }

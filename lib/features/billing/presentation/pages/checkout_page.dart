@@ -11,6 +11,7 @@ import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/domain/entities/sale.dart';
 import '../../../sales/domain/entities/sale_item.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../customers/domain/entities/customer.dart';
 import '../../domain/entities/payment_method.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../bloc/billing_bloc.dart';
@@ -60,6 +61,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       discountAmount: billingState.discountAmount,
       total: billingState.totalAmount,
       paymentMethod: billingState.paymentMethod,
+      customerId: billingState.customerId,
       customerName: (billingState.customerName ?? '').trim().isNotEmpty
           ? billingState.customerName!.trim()
           : null,
@@ -213,7 +215,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             const SizedBox(height: 16),
                             _buildPaymentMethodSection(context, billingState),
                             const SizedBox(height: 16),
-                            _buildCustomerSection(context),
+                            _buildCustomerSection(context, billingState),
 
                             const SizedBox(
                                 height: 120), // padding for bottom fixed bar
@@ -456,24 +458,70 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  Widget _buildCustomerSection(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE5E5EA)),
-        ),
-        child: ExpansionTile(
-          title: const Text('Customer (optional)',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          children: [
+  Widget _buildCustomerSection(BuildContext context, BillingState state) {
+    final hasSavedCustomer = state.customerId != null;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E5EA)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Customer (optional)',
+                  style:
+                      TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              TextButton.icon(
+                onPressed: () async {
+                  final selected =
+                      await context.push<Customer>('/customers/picker');
+                  if (selected != null && context.mounted) {
+                    context
+                        .read<BillingBloc>()
+                        .add(SelectCustomerEvent(selected));
+                  }
+                },
+                icon: const Icon(Icons.people_outline, size: 18),
+                label: const Text('Select saved'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (hasSavedCustomer)
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                        '${state.customerName ?? ''}'
+                        '${(state.customerPhone ?? '').isNotEmpty ? ' · ${state.customerPhone}' : ''}',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () =>
+                      context.read<BillingBloc>().add(ClearCustomerEvent()),
+                ),
+              ],
+            )
+          else ...[
             TextField(
               controller: _customerNameController,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(hintText: 'Name'),
+              decoration: const InputDecoration(hintText: 'Name (walk-in)'),
               onChanged: (value) => context.read<BillingBloc>().add(
                   SetCustomerInfoEvent(
                       name: value, phone: _customerPhoneController.text)),
@@ -488,7 +536,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       name: _customerNameController.text, phone: value)),
             ),
           ],
-        ),
+        ],
       ),
     );
   }

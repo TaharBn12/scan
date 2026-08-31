@@ -4,6 +4,7 @@ import '../../domain/entities/cart_item.dart';
 import '../../domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/product/domain/usecases/product_usecases.dart';
+import 'package:billing_app/features/customers/domain/entities/customer.dart';
 import '../../../../core/utils/printer_helper.dart';
 import '../../../../core/data/hive_database.dart';
 
@@ -26,7 +27,15 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     on<SetPaymentMethodEvent>(
         (event, emit) => emit(state.copyWith(paymentMethod: event.method)));
     on<SetCustomerInfoEvent>((event, emit) => emit(state.copyWith(
-        customerName: event.name, customerPhone: event.phone)));
+        customerName: event.name,
+        customerPhone: event.phone,
+        detachCustomer: true)));
+    on<SelectCustomerEvent>((event, emit) => emit(state.copyWith(
+        customerId: event.customer.id,
+        customerName: event.customer.name,
+        customerPhone: event.customer.phone)));
+    on<ClearCustomerEvent>(
+        (event, emit) => emit(state.copyWith(clearCustomer: true)));
   }
 
   Future<void> _onScanBarcode(

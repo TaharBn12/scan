@@ -10,6 +10,7 @@ class Sale extends Equatable {
   final double discountAmount;
   final double total;
   final PaymentMethod paymentMethod;
+  final String? customerId;
   final String? customerName;
   final String? customerPhone;
 
@@ -21,6 +22,7 @@ class Sale extends Equatable {
     required this.discountAmount,
     required this.total,
     required this.paymentMethod,
+    this.customerId,
     this.customerName,
     this.customerPhone,
   });
@@ -35,6 +37,7 @@ class Sale extends Equatable {
         'discountAmount': discountAmount,
         'total': total,
         'paymentMethod': paymentMethod.name,
+        'customerId': customerId,
         'customerName': customerName,
         'customerPhone': customerPhone,
       };
@@ -52,6 +55,7 @@ class Sale extends Equatable {
           (p) => p.name == map['paymentMethod'],
           orElse: () => PaymentMethod.cash,
         ),
+        customerId: map['customerId'] as String?,
         customerName: map['customerName'] as String?,
         customerPhone: map['customerPhone'] as String?,
       );
@@ -65,6 +69,7 @@ class Sale extends Equatable {
         discountAmount,
         total,
         paymentMethod,
+        customerId,
         customerName,
         customerPhone,
       ];

@@ -78,3 +78,12 @@ class SetCustomerInfoEvent extends BillingEvent {
   @override
   List<Object> get props => [name, phone];
 }
+
+class SelectCustomerEvent extends BillingEvent {
+  final Customer customer;
+  const SelectCustomerEvent(this.customer);
+  @override
+  List<Object> get props => [customer];
+}
+
+class ClearCustomerEvent extends BillingEvent {}

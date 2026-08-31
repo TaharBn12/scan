@@ -8,6 +8,7 @@ class BillingState extends Equatable {
   final double discountValue;
   final bool discountIsPercent;
   final PaymentMethod paymentMethod;
+  final String? customerId;
   final String? customerName;
   final String? customerPhone;
 
@@ -19,6 +20,7 @@ class BillingState extends Equatable {
     this.discountValue = 0,
     this.discountIsPercent = false,
     this.paymentMethod = PaymentMethod.cash,
+    this.customerId,
     this.customerName,
     this.customerPhone,
   });
@@ -43,8 +45,11 @@ class BillingState extends Equatable {
     double? discountValue,
     bool? discountIsPercent,
     PaymentMethod? paymentMethod,
+    String? customerId,
+    bool detachCustomer = false,
     String? customerName,
     String? customerPhone,
+    bool clearCustomer = false,
   }) {
     return BillingState(
       cartItems: cartItems ?? this.cartItems,
@@ -54,8 +59,13 @@ class BillingState extends Equatable {
       discountValue: discountValue ?? this.discountValue,
       discountIsPercent: discountIsPercent ?? this.discountIsPercent,
       paymentMethod: paymentMethod ?? this.paymentMethod,
-      customerName: customerName ?? this.customerName,
-      customerPhone: customerPhone ?? this.customerPhone,
+      customerId: clearCustomer
+          ? null
+          : (detachCustomer ? null : (customerId ?? this.customerId)),
+      customerName:
+          clearCustomer ? null : (customerName ?? this.customerName),
+      customerPhone:
+          clearCustomer ? null : (customerPhone ?? this.customerPhone),
     );
   }
 
@@ -68,6 +78,7 @@ class BillingState extends Equatable {
         discountValue,
         discountIsPercent,
         paymentMethod,
+        customerId,
         customerName,
         customerPhone,
       ];

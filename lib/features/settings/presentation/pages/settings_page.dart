@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:app_settings/app_settings.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/theme_controller.dart';
+import '../../../../core/utils/backup_helper.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
+import '../../../product/presentation/bloc/product_bloc.dart';
+import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../bloc/printer_bloc.dart';
 import '../bloc/printer_event.dart';
 import '../bloc/printer_state.dart';
@@ -109,12 +115,58 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 _buildDivider(),
                 _buildListItem(
+                  icon: Icons.people_outline,
+                  title: 'Customers',
+                  subtitle: 'Manage saved customers',
+                  onTap: () => context.push('/customers'),
+                ),
+                _buildDivider(),
+                _buildListItem(
                   icon: Icons.storefront,
                   title: 'Shop Details',
                   subtitle: 'Edit business info & address',
                   onTap: () => context.push('/shop'),
                 ),
               ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // Appearance Section
+            _buildSectionHeader('Appearance'),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey[100]!),
+              ),
+              child: ValueListenableBuilder<ThemeMode>(
+                valueListenable: themeController,
+                builder: (context, mode, _) {
+                  return SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                          value: ThemeMode.light,
+                          label: Text('Light'),
+                          icon: Icon(Icons.light_mode)),
+                      ButtonSegment(
+                          value: ThemeMode.dark,
+                          label: Text('Dark'),
+                          icon: Icon(Icons.dark_mode)),
+                      ButtonSegment(
+                          value: ThemeMode.system,
+                          label: Text('Auto'),
+                          icon: Icon(Icons.brightness_auto)),
+                    ],
+                    selected: {mode},
+                    onSelectionChanged: (selection) {
+                      themeController.setThemeMode(selection.first);
+                    },
+                  );
+                },
+              ),
             ),
 
             const SizedBox(height: 24),
@@ -213,10 +265,106 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
 
+            const SizedBox(height: 24),
+
+            // Data / Backup Section
+            _buildSectionHeader('Data'),
+            _buildListGroup(
+              children: [
+                _buildListItem(
+                  icon: Icons.upload_outlined,
+                  title: 'Export Backup',
+                  subtitle: 'Copy all data as text (products, sales, customers)',
+                  trailingIcon: null,
+                  onTap: () => _exportBackup(context),
+                ),
+                _buildDivider(),
+                _buildListItem(
+                  icon: Icons.download_outlined,
+                  title: 'Import Backup',
+                  subtitle: 'Restore from a previously exported backup',
+                  trailingIcon: null,
+                  onTap: () => _importBackup(context),
+                ),
+              ],
+            ),
+
             const SizedBox(height: 48),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _exportBackup(BuildContext context) async {
+    final json = BackupHelper.exportAsJson();
+    await Clipboard.setData(ClipboardData(text: json));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Backup copied to clipboard - paste it somewhere safe (notes, chat to yourself, etc.)'),
+        backgroundColor: Colors.green));
+  }
+
+  Future<void> _importBackup(BuildContext context) async {
+    final controller = TextEditingController();
+    final clipboard = await Clipboard.getData('text/plain');
+    if (clipboard?.text != null && clipboard!.text!.trim().startsWith('{')) {
+      controller.text = clipboard.text!;
+    }
+
+    if (!context.mounted) return;
+    await showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Import Backup'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: TextField(
+              controller: controller,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                  hintText: 'Paste your exported backup JSON here'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final navigator = Navigator.of(dialogContext);
+                try {
+                  final summary =
+                      await BackupHelper.importFromJson(controller.text);
+                  navigator.pop();
+                  if (!context.mounted) return;
+                  // Refresh every bloc so the imported data shows up immediately.
+                  context.read<ProductBloc>().add(LoadProducts());
+                  context.read<SaleBloc>().add(LoadSales());
+                  context.read<CustomerBloc>().add(LoadCustomers());
+                  context.read<ShopBloc>().add(LoadShopEvent());
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(
+                          'Imported ${summary.productsImported} products, '
+                          '${summary.salesImported} sales, '
+                          '${summary.customersImported} customers'),
+                      backgroundColor: Colors.green));
+                } catch (e) {
+                  navigator.pop();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Import failed: invalid backup text'),
+                      backgroundColor: Colors.red));
+                }
+              },
+              child: const Text('Restore'),
+            ),
+          ],
+        );
+      },
     );
   }
 

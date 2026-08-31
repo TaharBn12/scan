@@ -14,6 +14,10 @@ import '../../features/sales/data/repositories/sale_repository_impl.dart';
 import '../../features/sales/domain/repositories/sale_repository.dart';
 import '../../features/sales/domain/usecases/sale_usecases.dart';
 import '../../features/sales/presentation/bloc/sale_bloc.dart';
+import '../../features/customers/data/repositories/customer_repository_impl.dart';
+import '../../features/customers/domain/repositories/customer_repository.dart';
+import '../../features/customers/domain/usecases/customer_usecases.dart';
+import '../../features/customers/presentation/bloc/customer_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -82,5 +86,22 @@ Future<void> init() async {
   sl.registerLazySingleton(() => DeleteSaleUseCase(sl()));
   sl.registerLazySingleton<SaleRepository>(
     () => SaleRepositoryImpl(),
+  );
+
+  // Features - Customers
+  sl.registerFactory(
+    () => CustomerBloc(
+      getCustomersUseCase: sl(),
+      addCustomerUseCase: sl(),
+      updateCustomerUseCase: sl(),
+      deleteCustomerUseCase: sl(),
+    ),
+  );
+  sl.registerLazySingleton(() => GetCustomersUseCase(sl()));
+  sl.registerLazySingleton(() => AddCustomerUseCase(sl()));
+  sl.registerLazySingleton(() => UpdateCustomerUseCase(sl()));
+  sl.registerLazySingleton(() => DeleteCustomerUseCase(sl()));
+  sl.registerLazySingleton<CustomerRepository>(
+    () => CustomerRepositoryImpl(),
   );
 }

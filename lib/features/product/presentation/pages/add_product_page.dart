@@ -1,5 +1,6 @@
 import 'package:billing_app/core/widgets/input_label.dart';
 import 'package:billing_app/core/widgets/primary_button.dart';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +40,21 @@ class _AddProductPageState extends State<AddProductPage> {
         _barcode = result;
       });
     }
+  }
+
+  /// Generates a valid-looking EAN-13 barcode (with a correct check digit)
+  /// for shops that want to print/label a product that never had one.
+  void _generateBarcode() {
+    final rand = Random();
+    final digits = List<int>.generate(12, (_) => rand.nextInt(10));
+    int sum = 0;
+    for (int i = 0; i < 12; i++) {
+      sum += digits[i] * (i % 2 == 0 ? 1 : 3);
+    }
+    final checkDigit = (10 - (sum % 10)) % 10;
+    setState(() {
+      _barcode = [...digits, checkDigit].join();
+    });
   }
 
   void _submit() {
@@ -160,10 +176,26 @@ class _AddProductPageState extends State<AddProductPage> {
                             padding: const EdgeInsets.all(14),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            color:
+                                AppTheme.primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(Icons.auto_awesome,
+                                color: AppTheme.primaryColor),
+                            tooltip: 'Generate a barcode automatically',
+                            onPressed: _generateBarcode,
+                            padding: const EdgeInsets.all(14),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text('Tap the icon to open camera scanner',
+                    const Text(
+                        'Scan, type, or tap ✨ to auto-generate a barcode',
                         style:
                             TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
                     const SizedBox(height: 24),

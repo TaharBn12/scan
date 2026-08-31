@@ -10,6 +10,10 @@ import '../../features/billing/presentation/pages/checkout_page.dart';
 import '../../features/product/domain/entities/product.dart';
 import '../../features/product/presentation/pages/no_barcode_products_page.dart';
 import '../../features/sales/presentation/pages/reports_page.dart';
+import '../../features/customers/domain/entities/customer.dart';
+import '../../features/customers/presentation/pages/customers_page.dart';
+import '../../features/customers/presentation/pages/customer_form_page.dart';
+import '../../features/customers/presentation/pages/customer_detail_page.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -75,6 +79,34 @@ final router = GoRouter(
     GoRoute(
       path: '/reports',
       builder: (context, state) => const ReportsPage(),
+    ),
+    GoRoute(
+      path: '/customers',
+      builder: (context, state) => const CustomersPage(),
+      routes: [
+        GoRoute(
+          path: 'picker',
+          builder: (context, state) => const CustomersPage(selectionMode: true),
+        ),
+        GoRoute(
+          path: 'add',
+          builder: (context, state) => const CustomerFormPage(),
+        ),
+        GoRoute(
+          path: 'edit/:id',
+          builder: (context, state) {
+            final customer = state.extra as Customer?;
+            return CustomerFormPage(customer: customer);
+          },
+        ),
+        GoRoute(
+          path: 'detail/:id',
+          builder: (context, state) {
+            final customer = state.extra as Customer;
+            return CustomerDetailPage(customer: customer);
+          },
+        ),
+      ],
     ),
   ],
 );
