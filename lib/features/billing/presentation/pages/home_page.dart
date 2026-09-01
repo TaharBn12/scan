@@ -141,37 +141,10 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               children: [
                 _buildOverlayButton(
-                  icon: Icons.settings,
+                  icon: Icons.menu_rounded,
                   onPressed: () async {
                     _scannerController.stop();
-                    await context.push('/settings');
-                    if (_isCameraOn && mounted) _scannerController.start();
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildOverlayButton(
-                  icon: Icons.inventory_2_outlined,
-                  onPressed: () async {
-                    _scannerController.stop();
-                    await context.push('/no-barcode');
-                    if (_isCameraOn && mounted) _scannerController.start();
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildOverlayButton(
-                  icon: Icons.bar_chart,
-                  onPressed: () async {
-                    _scannerController.stop();
-                    await context.push('/reports');
-                    if (_isCameraOn && mounted) _scannerController.start();
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildOverlayButton(
-                  icon: Icons.people_outline,
-                  onPressed: () async {
-                    _scannerController.stop();
-                    await context.push('/customers');
+                    await context.push('/menu');
                     if (_isCameraOn && mounted) _scannerController.start();
                   },
                 ),

@@ -14,6 +14,7 @@ import '../../features/customers/domain/entities/customer.dart';
 import '../../features/customers/presentation/pages/customers_page.dart';
 import '../../features/customers/presentation/pages/customer_form_page.dart';
 import '../../features/customers/presentation/pages/customer_detail_page.dart';
+import '../../features/menu/presentation/pages/menu_page.dart';
 
 final router = GoRouter(
   initialLocation: '/',
@@ -34,6 +35,10 @@ final router = GoRouter(
           path: 'no-barcode',
           builder: (context, state) =>
               const NoBarcodeProductsPage(selectionMode: true),
+        ),
+        GoRoute(
+          path: 'menu',
+          builder: (context, state) => const MenuPage(),
         ),
       ],
     ),
