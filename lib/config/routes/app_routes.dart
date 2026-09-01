@@ -17,7 +17,7 @@ import '../../features/customers/presentation/pages/customer_detail_page.dart';
 import '../../features/menu/presentation/pages/menu_page.dart';
 
 final router = GoRouter(
-  initialLocation: '/',
+  initialLocation: '/menu',
   routes: [
     GoRoute(
       path: '/',

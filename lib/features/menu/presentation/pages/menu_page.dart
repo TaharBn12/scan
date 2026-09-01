@@ -138,14 +138,15 @@ class MenuPage extends StatelessWidget {
         children: [
           Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left,
-                    color: Colors.white, size: 28),
-                onPressed: () => context.pop(),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 4),
+              if (context.canPop())
+                IconButton(
+                  icon: const Icon(Icons.chevron_left,
+                      color: Colors.white, size: 28),
+                  onPressed: () => context.pop(),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              if (context.canPop()) const SizedBox(width: 4),
               const Text('Menu',
                   style: TextStyle(
                       color: Colors.white,
