@@ -11,6 +11,7 @@ class Sale extends Equatable {
   final double total;
   final PaymentMethod paymentMethod;
   final bool isPaid; // credit sales start false until settled
+  final bool isRefunded; // excluded from totals/profit once true
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
@@ -24,6 +25,7 @@ class Sale extends Equatable {
     required this.total,
     required this.paymentMethod,
     this.isPaid = true,
+    this.isRefunded = false,
     this.customerId,
     this.customerName,
     this.customerPhone,
@@ -32,7 +34,7 @@ class Sale extends Equatable {
   int get totalItemsCount => items.fold(0, (sum, i) => sum + i.quantity);
   double get profit => items.fold(0.0, (sum, i) => sum + i.lineProfit);
 
-  Sale copyWith({bool? isPaid}) {
+  Sale copyWith({bool? isPaid, bool? isRefunded}) {
     return Sale(
       id: id,
       dateTime: dateTime,
@@ -42,6 +44,7 @@ class Sale extends Equatable {
       total: total,
       paymentMethod: paymentMethod,
       isPaid: isPaid ?? this.isPaid,
+      isRefunded: isRefunded ?? this.isRefunded,
       customerId: customerId,
       customerName: customerName,
       customerPhone: customerPhone,
@@ -57,6 +60,7 @@ class Sale extends Equatable {
         'total': total,
         'paymentMethod': paymentMethod.name,
         'isPaid': isPaid,
+        'isRefunded': isRefunded,
         'customerId': customerId,
         'customerName': customerName,
         'customerPhone': customerPhone,
@@ -78,6 +82,7 @@ class Sale extends Equatable {
         // Sales recorded before this field existed are treated as paid
         // (they were cash/card only, before Credit existed).
         isPaid: map['isPaid'] as bool? ?? true,
+        isRefunded: map['isRefunded'] as bool? ?? false,
         customerId: map['customerId'] as String?,
         customerName: map['customerName'] as String?,
         customerPhone: map['customerPhone'] as String?,
@@ -93,6 +98,7 @@ class Sale extends Equatable {
         total,
         paymentMethod,
         isPaid,
+        isRefunded,
         customerId,
         customerName,
         customerPhone,

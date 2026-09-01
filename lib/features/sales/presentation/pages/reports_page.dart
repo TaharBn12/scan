@@ -7,6 +7,8 @@ import '../bloc/sale_bloc.dart';
 import '../../domain/entities/sale.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../billing/domain/entities/payment_method.dart';
+import '../../../product/presentation/bloc/product_bloc.dart';
+import '../../../product/domain/entities/product.dart';
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -121,6 +123,14 @@ class _OverviewTab extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _StatCard(label: 'This Month', value: state.monthTotal, wide: true),
+          if (state.monthOverMonthChange != null) ...[
+            const SizedBox(height: 12),
+            _ComparisonCard(
+              thisMonth: state.monthTotal,
+              lastMonth: state.lastMonthTotal,
+              changePercent: state.monthOverMonthChange!,
+            ),
+          ],
           const SizedBox(height: 20),
           const Text('Profit (revenue - cost)',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
@@ -210,6 +220,60 @@ class _StatCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(sub!, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ComparisonCard extends StatelessWidget {
+  final double thisMonth;
+  final double lastMonth;
+  final double changePercent;
+  const _ComparisonCard(
+      {required this.thisMonth,
+      required this.lastMonth,
+      required this.changePercent});
+
+  @override
+  Widget build(BuildContext context) {
+    final isUp = changePercent >= 0;
+    final color = isUp ? Colors.green : Colors.red;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('VS LAST MONTH',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                      color: Colors.grey[600])),
+              const SizedBox(height: 4),
+              Text('DA${lastMonth.toStringAsFixed(2)}',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+            ],
+          ),
+          Row(
+            children: [
+              Icon(isUp ? Icons.trending_up : Icons.trending_down,
+                  color: color, size: 22),
+              const SizedBox(width: 4),
+              Text('${isUp ? '+' : ''}${changePercent.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+            ],
+          ),
         ],
       ),
     );
@@ -376,10 +440,14 @@ class _SaleTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUnpaidCredit =
         sale.paymentMethod == PaymentMethod.credit && !sale.isPaid;
+    final statusColor =
+        sale.isRefunded ? Colors.grey : (isUnpaidCredit ? Colors.red : AppTheme.primaryColor);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: onTap,
-      child: Container(
+      child: Opacity(
+        opacity: sale.isRefunded ? 0.6 : 1,
+        child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -398,12 +466,16 @@ class _SaleTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: (isUnpaidCredit ? Colors.red : AppTheme.primaryColor)
-                    .withValues(alpha: 0.1),
+                color: statusColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(isUnpaidCredit ? Icons.hourglass_bottom : Icons.receipt,
-                  color: isUnpaidCredit ? Colors.red : AppTheme.primaryColor,
+              child: Icon(
+                  sale.isRefunded
+                      ? Icons.undo
+                      : (isUnpaidCredit
+                          ? Icons.hourglass_bottom
+                          : Icons.receipt),
+                  color: statusColor,
                   size: 20),
             ),
             const SizedBox(width: 12),
@@ -417,15 +489,20 @@ class _SaleTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                       '${sale.totalItemsCount} item(s) · ${sale.paymentMethod.label}'
+                      '${sale.isRefunded ? ' · REFUNDED' : ''}'
                       '${sale.customerName != null && sale.customerName!.isNotEmpty ? ' · ${sale.customerName}' : ''}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                 ],
               ),
             ),
             Text('DA${sale.total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                    fontWeight: FontWeight.bold, fontSize: 15)),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    decoration:
+                        sale.isRefunded ? TextDecoration.lineThrough : null)),
           ],
+        ),
         ),
       ),
     );
@@ -435,6 +512,7 @@ class _SaleTile extends StatelessWidget {
 /// Shared bottom sheet used by both the Debts and History tabs.
 void showSaleDetailSheet(BuildContext context, Sale sale) {
   final saleBloc = context.read<SaleBloc>();
+  final productBloc = context.read<ProductBloc>();
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -461,20 +539,10 @@ void showSaleDetailSheet(BuildContext context, Sale sale) {
                         DateFormat('dd MMM yyyy, hh:mm a').format(sale.dateTime),
                         style: const TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16)),
-                    if (isUnpaidCredit)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text('UNPAID',
-                            style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11)),
-                      ),
+                    if (sale.isRefunded)
+                      _badge('REFUNDED', Colors.grey)
+                    else if (isUnpaidCredit)
+                      _badge('UNPAID', Colors.red),
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -512,8 +580,8 @@ void showSaleDetailSheet(BuildContext context, Sale sale) {
                       color: Colors.orange),
                 ],
                 _summaryRow('Total', sale.total, bold: true),
-                if (isUnpaidCredit) ...[
-                  const SizedBox(height: 16),
+                if (!sale.isRefunded && isUnpaidCredit) ...[
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -532,10 +600,95 @@ void showSaleDetailSheet(BuildContext context, Sale sale) {
                     ),
                   ),
                 ],
+                if (!sale.isRefunded) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12))),
+                      onPressed: () =>
+                          _confirmRefund(context, sale, saleBloc, productBloc),
+                      icon: const Icon(Icons.undo),
+                      label: const Text('Refund This Sale'),
+                    ),
+                  ),
+                ],
               ],
             ),
           );
         },
+      );
+    },
+  );
+}
+
+Widget _badge(String text, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(text,
+        style: TextStyle(
+            color: color, fontWeight: FontWeight.bold, fontSize: 11)),
+  );
+}
+
+void _confirmRefund(BuildContext context, Sale sale, SaleBloc saleBloc,
+    ProductBloc productBloc) {
+  showDialog(
+    context: context,
+    builder: (dialogContext) {
+      return AlertDialog(
+        title: const Text('Refund This Sale?'),
+        content: const Text(
+            'This marks the sale as refunded, removes it from your totals '
+            'and profit, and puts its items back into stock (for products '
+            'that are still tracked). This can\'t be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              // Restore stock for any item whose product still exists and
+              // is currently stock-tracked.
+              for (final item in sale.items) {
+                Product? match;
+                for (final p in productBloc.state.products) {
+                  if (p.id == item.productId) {
+                    match = p;
+                    break;
+                  }
+                }
+                if (match != null && match.stock > 0) {
+                  productBloc.add(UpdateProduct(Product(
+                    id: match.id,
+                    name: match.name,
+                    barcode: match.barcode,
+                    price: match.price,
+                    stock: match.stock + item.quantity,
+                    hasBarcode: match.hasBarcode,
+                    costPrice: match.costPrice,
+                    category: match.category,
+                    lowStockThreshold: match.lowStockThreshold,
+                  )));
+                }
+              }
+              saleBloc.add(AddSale(sale.copyWith(isRefunded: true)));
+              Navigator.pop(dialogContext);
+              Navigator.pop(context);
+            },
+            child: const Text('Refund', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       );
     },
   );
