@@ -7,7 +7,7 @@ import '../../domain/entities/customer.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
 import '../../../sales/domain/entities/sale.dart';
-import '../../../sales/presentation/pages/reports_page.dart' show showSaleDetailSheet;
+import '../../../sales/presentation/pages/invoice_page.dart';
 import '../../../billing/domain/entities/payment_method.dart';
 
 class CustomerDetailPage extends StatelessWidget {
@@ -144,7 +144,8 @@ class CustomerDetailPage extends StatelessWidget {
         sale.paymentMethod == PaymentMethod.credit && !sale.isPaid;
     return InkWell(
       borderRadius: BorderRadius.circular(10),
-      onTap: () => showSaleDetailSheet(context, sale),
+      onTap: () => context.push('/invoice',
+          extra: InvoiceRouteArgs(sale: sale, isDraft: false)),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),

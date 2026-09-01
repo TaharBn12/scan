@@ -6,11 +6,9 @@ import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../shop/presentation/bloc/shop_bloc.dart';
-import '../../../product/domain/entities/product.dart';
-import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/domain/entities/sale.dart';
 import '../../../sales/domain/entities/sale_item.dart';
-import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../sales/presentation/pages/invoice_page.dart';
 import '../../../customers/domain/entities/customer.dart';
 import '../../domain/entities/payment_method.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -30,10 +28,6 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final TextEditingController _customerPhoneController =
       TextEditingController();
 
-  // Guards against recording the sale / decrementing stock twice if the
-  // merchant reprints the same receipt.
-  bool _saleFinalized = false;
-
   @override
   void dispose() {
     _discountController.dispose();
@@ -42,9 +36,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
     super.dispose();
   }
 
-  void _finalizeSale(BuildContext context, BillingState billingState) {
-    if (_saleFinalized || billingState.cartItems.isEmpty) return;
-    _saleFinalized = true;
+  Future<void> _reviewInvoice(
+      BuildContext context, BillingState billingState) async {
+    if (billingState.cartItems.isEmpty) return;
 
     final sale = Sale(
       id: const Uuid().v4(),
@@ -72,27 +66,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
           : null,
     );
 
-    context.read<SaleBloc>().add(AddSale(sale));
-
-    // Decrement stock for tracked products. stock == 0 is treated as
-    // "not tracked" (see AddProductPage), so we leave those untouched.
-    final productBloc = context.read<ProductBloc>();
-    for (final item in billingState.cartItems) {
-      if (item.product.stock > 0) {
-        final remaining = item.product.stock - item.quantity;
-        productBloc.add(UpdateProduct(Product(
-          id: item.product.id,
-          name: item.product.name,
-          barcode: item.product.barcode,
-          price: item.product.price,
-          stock: remaining < 0 ? 0 : remaining,
-          hasBarcode: item.product.hasBarcode,
-          costPrice: item.product.costPrice,
-          category: item.product.category,
-          lowStockThreshold: item.product.lowStockThreshold,
-        )));
-      }
-    }
+    await context.push('/invoice',
+        extra: InvoiceRouteArgs(sale: sale, isDraft: true));
   }
 
   @override
@@ -122,17 +97,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
               },
             ),
           ),
-          body: BlocConsumer<BillingBloc, BillingState>(
-            listener: (context, state) {
-              if (state.printSuccess) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Printed successfully'),
-                    backgroundColor: Colors.green));
-                _finalizeSale(context, state);
-                // context.read<BillingBloc>().add(ClearCartEvent());
-                // context.go('/');
-              }
-            },
+          body: BlocBuilder<BillingBloc, BillingState>(
             builder: (context, billingState) {
               return BlocBuilder<ShopBloc, ShopState>(
                   builder: (context, shopState) {
@@ -343,26 +308,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             ),
                           ),
                           PrimaryButton(
-                            onPressed: () {
-                              if (shopState is ShopLoaded) {
-                                context.read<BillingBloc>().add(
-                                    PrintReceiptEvent(
-                                        shopName: shopState.shop.name,
-                                        address1: shopState.shop.addressLine1,
-                                        address2: shopState.shop.addressLine2,
-                                        phone: shopState.shop.phoneNumber,
-                                        footer: shopState.shop.footerText));
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                            Text('Shop details not loaded'),
-                                        backgroundColor: Colors.red));
-                              }
-                            },
-                            label: 'Print Receipt',
-                            icon: Icons.print,
-                            isLoading: billingState.isPrinting,
+                            onPressed: () => _reviewInvoice(context, billingState),
+                            label: 'Review Invoice',
+                            icon: Icons.receipt_long,
+                            isLoading: false,
                           ),
                         ],
                       ),

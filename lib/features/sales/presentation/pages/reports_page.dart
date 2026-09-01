@@ -7,8 +7,7 @@ import '../bloc/sale_bloc.dart';
 import '../../domain/entities/sale.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../billing/domain/entities/payment_method.dart';
-import '../../../product/presentation/bloc/product_bloc.dart';
-import '../../../product/domain/entities/product.dart';
+import 'invoice_page.dart';
 
 class ReportsPage extends StatefulWidget {
   const ReportsPage({super.key});
@@ -383,7 +382,8 @@ class _DebtsTab extends StatelessWidget {
               final sale = sorted[index];
               return _SaleTile(
                 sale: sale,
-                onTap: () => showSaleDetailSheet(context, sale),
+                onTap: () => context.push('/invoice',
+                    extra: InvoiceRouteArgs(sale: sale, isDraft: false)),
               );
             },
           ),
@@ -424,7 +424,8 @@ class _HistoryTab extends StatelessWidget {
         final sale = sales[index];
         return _SaleTile(
           sale: sale,
-          onTap: () => showSaleDetailSheet(context, sale),
+          onTap: () => context.push('/invoice',
+                    extra: InvoiceRouteArgs(sale: sale, isDraft: false)),
         );
       },
     );
@@ -507,207 +508,4 @@ class _SaleTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Shared bottom sheet used by both the Debts and History tabs.
-void showSaleDetailSheet(BuildContext context, Sale sale) {
-  final saleBloc = context.read<SaleBloc>();
-  final productBloc = context.read<ProductBloc>();
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-    builder: (sheetContext) {
-      return DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (context, scrollController) {
-          final isUnpaidCredit =
-              sale.paymentMethod == PaymentMethod.credit && !sale.isPaid;
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                        DateFormat('dd MMM yyyy, hh:mm a').format(sale.dateTime),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                    if (sale.isRefunded)
-                      _badge('REFUNDED', Colors.grey)
-                    else if (isUnpaidCredit)
-                      _badge('UNPAID', Colors.red),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                    '${sale.paymentMethod.label}'
-                    '${sale.customerName != null && sale.customerName!.isNotEmpty ? ' · ${sale.customerName}' : ''}',
-                    style: TextStyle(color: Colors.grey[600])),
-                const Divider(height: 24),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    itemCount: sale.items.length,
-                    itemBuilder: (context, i) {
-                      final item = sale.items[i];
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          children: [
-                            Expanded(
-                                child: Text(
-                                    '${item.quantity} x ${item.productName}')),
-                            Text('DA${item.lineTotal.toStringAsFixed(2)}',
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const Divider(height: 24),
-                if (sale.discountAmount > 0) ...[
-                  _summaryRow('Subtotal', sale.subtotal),
-                  _summaryRow('Discount', -sale.discountAmount,
-                      color: Colors.orange),
-                ],
-                _summaryRow('Total', sale.total, bold: true),
-                if (!sale.isRefunded && isUnpaidCredit) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12))),
-                      onPressed: () {
-                        saleBloc.add(AddSale(sale.copyWith(isPaid: true)));
-                        Navigator.pop(sheetContext);
-                      },
-                      icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('Mark as Paid'),
-                    ),
-                  ),
-                ],
-                if (!sale.isRefunded) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red,
-                          side: const BorderSide(color: Colors.red),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12))),
-                      onPressed: () =>
-                          _confirmRefund(context, sale, saleBloc, productBloc),
-                      icon: const Icon(Icons.undo),
-                      label: const Text('Refund This Sale'),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
-}
-
-Widget _badge(String text, Color color) {
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: 0.1),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(text,
-        style: TextStyle(
-            color: color, fontWeight: FontWeight.bold, fontSize: 11)),
-  );
-}
-
-void _confirmRefund(BuildContext context, Sale sale, SaleBloc saleBloc,
-    ProductBloc productBloc) {
-  showDialog(
-    context: context,
-    builder: (dialogContext) {
-      return AlertDialog(
-        title: const Text('Refund This Sale?'),
-        content: const Text(
-            'This marks the sale as refunded, removes it from your totals '
-            'and profit, and puts its items back into stock (for products '
-            'that are still tracked). This can\'t be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              // Restore stock for any item whose product still exists and
-              // is currently stock-tracked.
-              for (final item in sale.items) {
-                Product? match;
-                for (final p in productBloc.state.products) {
-                  if (p.id == item.productId) {
-                    match = p;
-                    break;
-                  }
-                }
-                if (match != null && match.stock > 0) {
-                  productBloc.add(UpdateProduct(Product(
-                    id: match.id,
-                    name: match.name,
-                    barcode: match.barcode,
-                    price: match.price,
-                    stock: match.stock + item.quantity,
-                    hasBarcode: match.hasBarcode,
-                    costPrice: match.costPrice,
-                    category: match.category,
-                    lowStockThreshold: match.lowStockThreshold,
-                  )));
-                }
-              }
-              saleBloc.add(AddSale(sale.copyWith(isRefunded: true)));
-              Navigator.pop(dialogContext);
-              Navigator.pop(context);
-            },
-            child: const Text('Refund', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      );
-    },
-  );
-}
-
-Widget _summaryRow(String label, double value, {bool bold = false, Color? color}) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style:
-                TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal)),
-        Text('DA${value.toStringAsFixed(2)}',
-            style: TextStyle(
-                fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-                color: color)),
-      ],
-    ),
-  );
 }

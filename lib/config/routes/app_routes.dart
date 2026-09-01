@@ -15,6 +15,7 @@ import '../../features/customers/presentation/pages/customers_page.dart';
 import '../../features/customers/presentation/pages/customer_form_page.dart';
 import '../../features/customers/presentation/pages/customer_detail_page.dart';
 import '../../features/menu/presentation/pages/menu_page.dart';
+import '../../features/sales/presentation/pages/invoice_page.dart';
 
 final router = GoRouter(
   initialLocation: '/menu',
@@ -39,6 +40,13 @@ final router = GoRouter(
         GoRoute(
           path: 'menu',
           builder: (context, state) => const MenuPage(),
+        ),
+        GoRoute(
+          path: 'invoice',
+          builder: (context, state) {
+            final args = state.extra as InvoiceRouteArgs;
+            return InvoicePage(args: args);
+          },
         ),
       ],
     ),
