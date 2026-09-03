@@ -182,7 +182,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
       onTap: widget.selectionMode ? () => _addToCart(context, product) : null,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: borderColor),
           boxShadow: const [

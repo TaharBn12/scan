@@ -225,7 +225,7 @@ class _InvoicePageState extends State<InvoicePage> {
         _sale.paymentMethod == PaymentMethod.credit && !_sale.isPaid;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

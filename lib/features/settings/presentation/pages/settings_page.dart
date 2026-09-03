@@ -51,7 +51,7 @@ class _SettingsPageState extends State<SettingsPage> {
             // Profile Section
             Container(
               width: double.infinity,
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
               child: BlocBuilder<ShopBloc, ShopState>(
                 builder: (context, state) {
@@ -138,7 +138,7 @@ class _SettingsPageState extends State<SettingsPage> {
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.grey[100]!),
               ),
@@ -389,7 +389,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey[100]!),
       ),

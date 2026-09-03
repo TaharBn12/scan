@@ -120,7 +120,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             // Table
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: Theme.of(context).colorScheme.surface,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: borderColor),
                                 boxShadow: [
@@ -328,7 +328,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E5EA)),
       ),
@@ -377,7 +377,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E5EA)),
       ),
@@ -418,7 +418,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFE5E5EA)),
       ),

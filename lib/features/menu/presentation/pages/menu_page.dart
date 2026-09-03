@@ -12,7 +12,7 @@ class MenuPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Column(
           children: [
@@ -222,13 +222,14 @@ class _MenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
@@ -253,11 +254,11 @@ class _MenuCard extends StatelessWidget {
             ),
             const Spacer(),
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14.5,
                     height: 1.15,
-                    color: Color(0xFF0F172A))),
+                    color: scheme.onSurface)),
             const SizedBox(height: 3),
             Text(subtitle,
                 style: TextStyle(fontSize: 11.5, color: Colors.grey[500])),
@@ -283,13 +284,14 @@ class _WideMenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: scheme.surface,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
@@ -308,7 +310,7 @@ class _WideMenuTile extends StatelessWidget {
                 color: Colors.grey.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFF0F172A), size: 22),
+              child: Icon(icon, color: scheme.onSurface, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -316,8 +318,10 @@ class _WideMenuTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14.5)),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14.5,
+                          color: scheme.onSurface)),
                   const SizedBox(height: 2),
                   Text(subtitle,
                       style:

@@ -46,7 +46,7 @@ class CustomerDetailPage extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.grey[100]!),
                 ),
@@ -150,7 +150,7 @@ class CustomerDetailPage extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
               color: isUnpaidCredit
