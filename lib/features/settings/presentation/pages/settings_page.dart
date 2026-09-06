@@ -7,6 +7,7 @@ import 'package:app_settings/app_settings.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/backup_helper.dart';
+import '../../../../core/utils/sync_helper.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
@@ -23,11 +24,20 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  final TextEditingController _syncUrlController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     // Re-initialize printer state whenever settings page opens
     context.read<PrinterBloc>().add(InitPrinterEvent());
+    _syncUrlController.text = SyncHelper.getUrl() ?? '';
+  }
+
+  @override
+  void dispose() {
+    _syncUrlController.dispose();
+    super.dispose();
   }
 
   @override
@@ -289,10 +299,102 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
 
+            const SizedBox(height: 24),
+
+            // Website Sync Section
+            _buildSectionHeader('Website Sync'),
+            _buildSyncSection(),
+
             const SizedBox(height: 48),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSyncSection() {
+    return StatefulBuilder(
+      builder: (context, setLocalState) {
+        final token = SyncHelper.getOrCreateToken();
+        final enabled = SyncHelper.isEnabled();
+
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey[100]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Your Token',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(token,
+                          style: const TextStyle(
+                              fontFamily: 'monospace', fontSize: 12)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    tooltip: 'Copy token',
+                    onPressed: () async {
+                      await Clipboard.setData(ClipboardData(text: token));
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Token copied'),
+                          backgroundColor: Colors.green));
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                  'Paste this token into your website to link this shop.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              const SizedBox(height: 20),
+              const Text('Website URL',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _syncUrlController,
+                keyboardType: TextInputType.url,
+                decoration: const InputDecoration(
+                    hintText: 'https://your-website.com/api/scan'),
+                onChanged: (value) => SyncHelper.setUrl(value),
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                activeThumbColor: AppTheme.primaryColor,
+                title: const Text('Send scans to website',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                subtitle: const Text(
+                    'Every barcode scanned in the app is sent there instantly',
+                    style: TextStyle(fontSize: 11)),
+                value: enabled,
+                onChanged: (value) {
+                  SyncHelper.setEnabled(value);
+                  setLocalState(() {});
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
