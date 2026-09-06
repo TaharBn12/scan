@@ -24,22 +24,54 @@ jobs:
           cache: true
 
       - name: Flutter version
-        run: flutter --version
+        run: |
+          flutter --version | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Get packages
-        run: flutter pub get
+        run: flutter pub get 2>&1 | tee pubget.txt
 
       - name: Generate code
-        run: dart run build_runner build --delete-conflicting-outputs
+        run: dart run build_runner build --delete-conflicting-outputs 2>&1 | tail -n 40 | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Analyze
-        run: flutter analyze --no-fatal-infos
+        run: |
+          set -o pipefail
+          flutter analyze --no-fatal-infos 2>&1 | tee analyze.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo '## flutter analyze'
+            echo '```'
+            tail -n 200 analyze.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Test
-        run: flutter test
+        if: always()
+        run: |
+          set -o pipefail
+          flutter test 2>&1 | tee test.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo '## flutter test'
+            echo '```'
+            tail -n 120 test.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Build debug APK
-        run: flutter build apk --debug
+        run: |
+          set -o pipefail
+          flutter build apk --debug 2>&1 | tee build.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo '## flutter build apk --debug'
+            echo '```'
+            tail -n 80 build.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
