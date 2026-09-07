@@ -2,6 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../data/hive_database.dart';
 import 'money.dart';
 
 class EscPos {
@@ -39,8 +40,16 @@ class PrinterHelper {
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
-  /// Characters per line: 32 for 58mm paper, 48 for 80mm.
-  int charsPerLine = 32;
+  /// Characters per line: 32 for 58mm paper, 48 for 80mm. Follows the
+  /// "paper_width" setting (58/80) chosen in Settings.
+  int get charsPerLine {
+    try {
+      final width = HiveDatabase.settingsBox.get('paper_width') as int? ?? 58;
+      return width >= 80 ? 48 : 32;
+    } catch (_) {
+      return 32;
+    }
+  }
 
   Future<bool> checkPermission() async {
     // Android 12+ needs BLUETOOTH_SCAN, BLUETOOTH_CONNECT

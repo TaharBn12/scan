@@ -1,17 +1,31 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:app_settings/app_settings.dart' as device_settings;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:app_settings/app_settings.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
+import '../../../../core/data/hive_database.dart';
+import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/pin_helper.dart';
+import '../../../../core/security/session_controller.dart';
+import '../../../../core/settings/app_settings_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/backup_helper.dart';
+import '../../../../core/utils/money.dart';
+import '../../../../core/utils/printer_helper.dart';
 import '../../../../core/utils/sync_helper.dart';
-import '../../../shop/presentation/bloc/shop_bloc.dart';
+import '../../../customers/presentation/bloc/customer_bloc.dart';
+import '../../../expenses/presentation/bloc/expense_bloc.dart';
+import '../../../inventory/presentation/bloc/inventory_bloc.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
-import '../../../customers/presentation/bloc/customer_bloc.dart';
+import '../../../shop/presentation/bloc/shop_bloc.dart';
 import '../bloc/printer_bloc.dart';
 import '../bloc/printer_event.dart';
 import '../bloc/printer_state.dart';
@@ -24,373 +38,627 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  static const _appVersion = '2.0.0';
+
   final TextEditingController _syncUrlController = TextEditingController();
+  final TextEditingController _currencyController = TextEditingController();
+  bool _syncing = false;
+  bool _backingUp = false;
 
   @override
   void initState() {
     super.initState();
-    // Re-initialize printer state whenever settings page opens
     context.read<PrinterBloc>().add(InitPrinterEvent());
     _syncUrlController.text = SyncHelper.getUrl() ?? '';
+    _currencyController.text = appSettings.value.currencySymbol;
   }
 
   @override
   void dispose() {
     _syncUrlController.dispose();
+    _currencyController.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        centerTitle: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.chevron_left,
-              size: 28, color: Theme.of(context).primaryColor),
-          onPressed: () => context.pop(),
+  void _snack(String text, {Color? color}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
+  }
+
+  String _shopName() {
+    final s = context.read<ShopBloc>().state;
+    return s is ShopLoaded && s.shop.name.isNotEmpty ? s.shop.name : '';
+  }
+
+  void _reloadAll() {
+    context.read<ProductBloc>().add(LoadProducts());
+    context.read<SaleBloc>().add(LoadSales());
+    context.read<CustomerBloc>().add(LoadCustomers());
+    context.read<ShopBloc>().add(LoadShopEvent());
+    context.read<ExpenseBloc>().add(LoadExpenses());
+    context.read<InventoryBloc>().add(LoadInventory());
+  }
+
+  // ------------------------------------------------------------ backups
+
+  Future<void> _exportBackup() async {
+    final l10n = context.l10n;
+    setState(() => _backingUp = true);
+    try {
+      final file = await BackupHelper.exportAndShare(subject: l10n.appTitle);
+      _snack(l10n.t('backup_saved', {'path': file.path.split('/').last}),
+          color: Colors.green);
+    } catch (e) {
+      _snack(l10n.t('export_failed', {'error': e}), color: Colors.red);
+    } finally {
+      if (mounted) setState(() => _backingUp = false);
+    }
+  }
+
+  Future<void> _copyBackupToClipboard() async {
+    final l10n = context.l10n;
+    await Clipboard.setData(ClipboardData(text: BackupHelper.exportAsJson()));
+    _snack(l10n.t('backup_copied'), color: Colors.green);
+  }
+
+  Future<void> _restore(Future<BackupImportSummary> Function() run) async {
+    final l10n = context.l10n;
+    try {
+      final summary = await run();
+      if (!mounted) return;
+      _reloadAll();
+      _snack(
+          l10n.t('imported_summary', {
+            'products': summary.productsImported,
+            'sales': summary.salesImported,
+            'customers': summary.customersImported,
+          }),
+          color: Colors.green);
+    } catch (_) {
+      _snack(l10n.t('import_failed'), color: Colors.red);
+    }
+  }
+
+  Future<bool> _confirmRestore() async {
+    final l10n = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.t('import_backup')),
+        content: Text(l10n.t('restore_confirm')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l10n.t('restore'))),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _importFromFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.any,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty || !mounted) return;
+    final picked = result.files.first;
+    if (!await _confirmRestore()) return;
+    await _restore(() async {
+      if (picked.bytes != null) {
+        return BackupHelper.importFromJson(utf8.decode(picked.bytes!));
+      }
+      if (picked.path != null) {
+        return BackupHelper.importFromFile(File(picked.path!));
+      }
+      throw const FormatException('empty');
+    });
+  }
+
+  Future<void> _importFromText() async {
+    final l10n = context.l10n;
+    final controller = TextEditingController();
+    final clipboard = await Clipboard.getData('text/plain');
+    if (clipboard?.text != null && clipboard!.text!.trim().startsWith('{')) {
+      controller.text = clipboard.text!;
+    }
+    if (!mounted) return;
+    final text = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.t('import_title')),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: TextField(
+            controller: controller,
+            maxLines: 8,
+            decoration: InputDecoration(hintText: l10n.t('import_hint')),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: Text(l10n.t('restore'))),
+        ],
+      ),
+    );
+    if (text == null || text.trim().isEmpty || !mounted) return;
+    await _restore(() => BackupHelper.importFromJson(text));
+  }
+
+  Future<void> _showLocalBackups() async {
+    final l10n = context.l10n;
+    final files = await BackupHelper.listBackups();
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: files.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.all(32),
+                child: Text(l10n.t('no_backups_yet'),
+                    textAlign: TextAlign.center),
+              )
+            : ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final f in files)
+                    ListTile(
+                      leading: const Icon(Icons.description_outlined),
+                      title: Text(f.path.split('/').last),
+                      subtitle: Text(
+                          '${(f.lengthSync() / 1024).toStringAsFixed(1)} KB'),
+                      onTap: () async {
+                        Navigator.pop(sheet);
+                        if (!await _confirmRestore()) return;
+                        await _restore(() => BackupHelper.importFromFile(f));
+                      },
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------- sync
+
+  Future<void> _syncNow() async {
+    final l10n = context.l10n;
+    if ((SyncHelper.getUrl() ?? '').trim().isEmpty) {
+      _snack(l10n.t('sync_url_missing'), color: Colors.orange);
+      return;
+    }
+    setState(() => _syncing = true);
+    final result = await SyncHelper.syncAll();
+    if (!mounted) return;
+    setState(() => _syncing = false);
+    if (result.ok) {
+      if (result.pulledProducts > 0) {
+        context.read<ProductBloc>().add(LoadProducts());
+      }
+      _snack(
+          '${l10n.t('sync_success')} · ${l10n.t('sync_summary', {
+                'pushed': result.pushed,
+                'pulled': result.pulledProducts
+              })}',
+          color: Colors.green);
+    } else {
+      _snack(l10n.t('sync_failed', {'error': result.error ?? ''}),
+          color: Colors.red);
+    }
+  }
+
+  Future<void> _resendAll() async {
+    final l10n = context.l10n;
+    await SyncHelper.enqueueEverything();
+    if (!mounted) return;
+    setState(() {});
+    _snack(l10n.t('queued_count', {'count': SyncHelper.pendingCount}),
+        color: Colors.green);
+  }
+
+  // ----------------------------------------------------------------- PIN
+
+  Future<String?> _askPin(String title, {String? hint}) async {
+    final l10n = context.l10n;
+    final controller = TextEditingController();
+    String? error;
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              hintText: hint ?? l10n.t('enter_pin'),
+              errorText: error,
+              counterText: '',
+            ),
+            onSubmitted: (_) {
+              if (!PinHelper.isValidPin(controller.text)) {
+                setLocal(() => error = l10n.t('pin_too_short'));
+                return;
+              }
+              Navigator.pop(ctx, controller.text);
+            },
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: Text(l10n.cancel)),
+            FilledButton(
+              onPressed: () {
+                if (!PinHelper.isValidPin(controller.text)) {
+                  setLocal(() => error = l10n.t('pin_too_short'));
+                  return;
+                }
+                Navigator.pop(ctx, controller.text);
+              },
+              child: Text(l10n.ok),
+            ),
+          ],
         ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
+    );
+    return pin;
+  }
+
+  Future<bool> _verifyCurrentPin() async {
+    final l10n = context.l10n;
+    if (!PinHelper.hasAppPin) return true;
+    final current = await _askPin(l10n.t('current_pin'));
+    if (current == null) return false;
+    if (!PinHelper.verifyAppPin(current)) {
+      _snack(l10n.t('wrong_pin'), color: Colors.red);
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _setOrChangePin() async {
+    final l10n = context.l10n;
+    if (!await _verifyCurrentPin()) return;
+    if (!mounted) return;
+    final pin = await _askPin(l10n.t('set_pin'), hint: l10n.t('enter_new_pin'));
+    if (pin == null || !mounted) return;
+    final confirm = await _askPin(l10n.t('confirm_pin'));
+    if (confirm == null || !mounted) return;
+    if (pin != confirm) {
+      _snack(l10n.t('pin_mismatch'), color: Colors.red);
+      return;
+    }
+    await PinHelper.setAppPin(pin);
+    await appSettings.setPinEnabled(true);
+    sessionController.refresh();
+    if (!mounted) return;
+    setState(() {});
+    _snack(l10n.t('pin_set'), color: Colors.green);
+  }
+
+  Future<void> _removePin() async {
+    final l10n = context.l10n;
+    if (!await _verifyCurrentPin()) return;
+    await PinHelper.clearAppPin();
+    await appSettings.setPinEnabled(false);
+    sessionController.refresh();
+    if (!mounted) return;
+    setState(() {});
+    _snack(l10n.t('pin_removed'), color: Colors.green);
+  }
+
+  Future<void> _togglePin(bool enabled) async {
+    if (enabled) {
+      if (!PinHelper.hasAppPin) {
+        await _setOrChangePin();
+      } else {
+        await appSettings.setPinEnabled(true);
+        sessionController.refresh();
+      }
+    } else {
+      if (!await _verifyCurrentPin()) return;
+      await appSettings.setPinEnabled(false);
+      sessionController.refresh();
+    }
+    if (mounted) setState(() {});
+  }
+
+  // ------------------------------------------------------------- printer
+
+  Future<void> _choosePrinter() async {
+    final l10n = context.l10n;
+    final helper = PrinterHelper();
+    await helper.checkPermission();
+    final devices = await helper.getBondedDevices();
+    if (!mounted) return;
+    if (devices.isEmpty) {
+      _snack(l10n.t('no_paired_devices'), color: Colors.orange);
+      return;
+    }
+    await showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (sheet) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
           children: [
-            // Profile Section
-            Container(
-              width: double.infinity,
-              color: Theme.of(context).colorScheme.surface,
-              padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
-              child: BlocBuilder<ShopBloc, ShopState>(
-                builder: (context, state) {
-                  String shopName = 'Elite Groceries';
-                  String initials = 'EG';
-                  if (state is ShopLoaded && state.shop.name.isNotEmpty) {
-                    shopName = state.shop.name;
-                    final parts = shopName.split(' ');
-                    initials = parts
-                        .take(2)
-                        .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '')
-                        .join('');
-                    if (initials.isEmpty) initials = 'S';
-                  }
-
-                  return Column(
-                    children: [
-                      Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.primaryColor
-                                    .withValues(alpha: 0.2),
-                                blurRadius: 15,
-                                spreadRadius: 5,
-                              )
-                            ]),
-                        alignment: Alignment.center,
-                        child: Text(initials,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: -1)),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(shopName.toUpperCase(),
-                          style: const TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.bold)),
-                    ],
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Management Section
-            _buildSectionHeader('Management'),
-            _buildListGroup(
-              children: [
-                _buildListItem(
-                  icon: Icons.qr_code_scanner,
-                  title: 'Products',
-                  subtitle: 'Manage stock and barcodes',
-                  onTap: () => context.push('/products'),
-                ),
-                _buildDivider(),
-                _buildListItem(
-                  icon: Icons.people_outline,
-                  title: 'Customers',
-                  subtitle: 'Manage saved customers',
-                  onTap: () => context.push('/customers'),
-                ),
-                _buildDivider(),
-                _buildListItem(
-                  icon: Icons.storefront,
-                  title: 'Shop Details',
-                  subtitle: 'Edit business info & address',
-                  onTap: () => context.push('/shop'),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Appearance Section
-            _buildSectionHeader('Appearance'),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey[100]!),
-              ),
-              child: ValueListenableBuilder<ThemeMode>(
-                valueListenable: themeController,
-                builder: (context, mode, _) {
-                  return SegmentedButton<ThemeMode>(
-                    segments: const [
-                      ButtonSegment(
-                          value: ThemeMode.light,
-                          label: Text('Light'),
-                          icon: Icon(Icons.light_mode)),
-                      ButtonSegment(
-                          value: ThemeMode.dark,
-                          label: Text('Dark'),
-                          icon: Icon(Icons.dark_mode)),
-                      ButtonSegment(
-                          value: ThemeMode.system,
-                          label: Text('Auto'),
-                          icon: Icon(Icons.brightness_auto)),
-                    ],
-                    selected: {mode},
-                    onSelectionChanged: (selection) {
-                      themeController.setThemeMode(selection.first);
-                    },
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Hardware Section
-            _buildSectionHeader('Hardware'),
-            BlocConsumer<PrinterBloc, PrinterState>(
-              listener: (context, state) {
-                if (state.errorMessage != null) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(state.errorMessage!),
-                      backgroundColor: Colors.red));
-                } else if (state.status == PrinterStatus.connected) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Connected to printer'),
-                      backgroundColor: Colors.green));
-                }
-              },
-              builder: (context, state) {
-                return _buildListGroup(
-                  children: [
-                    _buildListItem(
-                      icon: Icons.print,
-                      title: 'Print Device',
-                      subtitleWidget: Row(
-                        children: [
-                          Text(
-                            state.connectedMac != null
-                                ? (state.connectedName ?? 'Printer connected')
-                                : 'No printer connected',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500]),
-                          ),
-                          if (state.connectedMac != null) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                  color: Colors.teal[100],
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: Colors.teal[200]!)),
-                              child: Text(
-                                'CONNECTED',
-                                style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.teal[700]),
-                              ),
-                            ),
-                          ]
-                        ],
-                      ),
-                      trailingWidget: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (state.status == PrinterStatus.scanning ||
-                              state.status == PrinterStatus.connecting)
-                            const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                          else
-                            IconButton(
-                              icon: const Icon(Icons.refresh),
-                              onPressed: () => context
-                                  .read<PrinterBloc>()
-                                  .add(RefreshPrinterEvent()),
-                              color: AppTheme.primaryColor,
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.settings),
-                            onPressed: () {
-                              AppSettings.openAppSettings(
-                                  type: AppSettingsType.bluetooth);
-                            },
-                            color: Colors.grey,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              child: Text(
-                "To connect a new device, tap on the Settings gear to pair in phone's Bluetooth settings, then return and hit Refresh.",
-                style: TextStyle(
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey[500]),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(l10n.t('paired_devices'),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            for (final d in devices)
+              ListTile(
+                leading: const Icon(Icons.print_outlined),
+                title: Text(d.name),
+                subtitle: Text(d.macAdress),
+                onTap: () {
+                  Navigator.pop(sheet);
+                  context.read<PrinterBloc>().add(
+                      ConnectPrinterEvent(mac: d.macAdress, name: d.name));
+                },
               ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Data / Backup Section
-            _buildSectionHeader('Data'),
-            _buildListGroup(
-              children: [
-                _buildListItem(
-                  icon: Icons.upload_outlined,
-                  title: 'Export Backup',
-                  subtitle: 'Copy all data as text (products, sales, customers)',
-                  trailingIcon: null,
-                  onTap: () => _exportBackup(context),
-                ),
-                _buildDivider(),
-                _buildListItem(
-                  icon: Icons.download_outlined,
-                  title: 'Import Backup',
-                  subtitle: 'Restore from a previously exported backup',
-                  trailingIcon: null,
-                  onTap: () => _importBackup(context),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Website Sync Section
-            _buildSectionHeader('Website Sync'),
-            _buildSyncSection(),
-
-            const SizedBox(height: 48),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSyncSection() {
-    return StatefulBuilder(
-      builder: (context, setLocalState) {
-        final token = SyncHelper.getOrCreateToken();
-        final enabled = SyncHelper.isEnabled();
+  // --------------------------------------------------------------- build
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey[100]!),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.settings,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.adaptive.arrow_back, color: theme.primaryColor),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/menu'),
+        ),
+      ),
+      body: ValueListenableBuilder<AppSettings>(
+        valueListenable: appSettings,
+        builder: (context, settings, _) {
+          return ListView(
+            padding: const EdgeInsets.only(bottom: 48),
             children: [
-              const Text('Your Token',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(token,
-                          style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: 12)),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    tooltip: 'Copy token',
-                    onPressed: () async {
-                      await Clipboard.setData(ClipboardData(text: token));
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('Token copied'),
-                          backgroundColor: Colors.green));
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                  'Paste this token into your website to link this shop.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              _buildProfile(),
+              const SizedBox(height: 16),
+              _header(l10n.t('management')),
+              _group([
+                _tile(
+                  icon: Icons.storefront,
+                  title: l10n.t('shop_details'),
+                  subtitle: l10n.t('edit_business_info'),
+                  onTap: () => context.push('/shop'),
+                ),
+                _tile(
+                  icon: Icons.qr_code_scanner,
+                  title: l10n.products,
+                  subtitle: l10n.t('manage_stock_barcodes'),
+                  onTap: () => context.push('/products'),
+                ),
+                _tile(
+                  icon: Icons.people_outline,
+                  title: l10n.customers,
+                  subtitle: l10n.t('manage_saved_customers'),
+                  onTap: () => context.push('/customers'),
+                ),
+                _tile(
+                  icon: Icons.manage_accounts_outlined,
+                  title: l10n.users,
+                  subtitle: l10n.t('users_subtitle'),
+                  onTap: () => context.push('/users'),
+                ),
+              ]),
               const SizedBox(height: 20),
-              const Text('Website URL',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _syncUrlController,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                    hintText: 'https://your-website.com/api/scan'),
-                onChanged: (value) => SyncHelper.setUrl(value),
+              _header(l10n.t('general')),
+              _card(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _label(l10n.t('language')),
+                    const SizedBox(height: 8),
+                    _LanguagePicker(current: settings.locale),
+                    const SizedBox(height: 18),
+                    _label(l10n.t('appearance')),
+                    const SizedBox(height: 8),
+                    ValueListenableBuilder<ThemeMode>(
+                      valueListenable: themeController,
+                      builder: (context, mode, _) => SegmentedButton<ThemeMode>(
+                        segments: [
+                          ButtonSegment(
+                              value: ThemeMode.light,
+                              label: Text(l10n.t('light')),
+                              icon: const Icon(Icons.light_mode)),
+                          ButtonSegment(
+                              value: ThemeMode.dark,
+                              label: Text(l10n.t('dark')),
+                              icon: const Icon(Icons.dark_mode)),
+                          ButtonSegment(
+                              value: ThemeMode.system,
+                              label: Text(l10n.t('auto')),
+                              icon: const Icon(Icons.brightness_auto)),
+                        ],
+                        selected: {mode},
+                        onSelectionChanged: (s) =>
+                            themeController.setThemeMode(s.first),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _label(l10n.t('currency')),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 110,
+                          child: TextField(
+                            controller: _currencyController,
+                            textAlign: TextAlign.center,
+                            maxLength: 6,
+                            decoration: InputDecoration(
+                              labelText: l10n.t('currency_symbol'),
+                              counterText: '',
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onChanged: (v) {
+                              if (v.trim().isNotEmpty) {
+                                appSettings.setCurrency(symbol: v);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<int>(
+                            initialValue: settings.decimalDigits,
+                            decoration: InputDecoration(
+                              labelText: l10n.t('decimals'),
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 0, child: Text('0')),
+                              DropdownMenuItem(value: 1, child: Text('1')),
+                              DropdownMenuItem(value: 2, child: Text('2')),
+                              DropdownMenuItem(value: 3, child: Text('3')),
+                            ],
+                            onChanged: (v) {
+                              if (v != null) {
+                                appSettings.setCurrency(decimals: v);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.t('symbol_before_amount'),
+                          style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(
+                          l10n.t('currency_example',
+                              {'amount': Money.format(1234.5)}),
+                          style: const TextStyle(fontSize: 11)),
+                      value: settings.currencySymbolBefore,
+                      onChanged: (v) => appSettings.setCurrency(symbolBefore: v),
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(l10n.t('decimal_quantities'),
+                          style: const TextStyle(fontSize: 13)),
+                      subtitle: Text(l10n.t('decimal_quantities_hint'),
+                          style: const TextStyle(fontSize: 11)),
+                      value: settings.decimalQuantities,
+                      onChanged: (v) => appSettings.setDecimalQuantities(v),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              _header(l10n.t('security')),
+              _buildSecurity(settings),
+              const SizedBox(height: 20),
+              _header(l10n.t('hardware')),
+              _buildPrinter(),
+              const SizedBox(height: 20),
+              _header(l10n.t('data')),
+              _buildBackup(),
+              const SizedBox(height: 20),
+              _header(l10n.t('website_sync')),
+              _buildSync(),
+              const SizedBox(height: 20),
+              _header(l10n.t('about')),
+              _group([
+                _tile(
+                  icon: Icons.info_outline,
+                  title: l10n.appTitle,
+                  subtitle: l10n.t('version', {'version': _appVersion}),
+                  showChevron: false,
+                ),
+              ]),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProfile() {
+    return BlocBuilder<ShopBloc, ShopState>(
+      builder: (context, state) {
+        String shopName = context.l10n.t('your_shop');
+        if (state is ShopLoaded && state.shop.name.isNotEmpty) {
+          shopName = state.shop.name;
+        }
+        final initials = shopName
+            .trim()
+            .split(RegExp(r'\s+'))
+            .take(2)
+            .map((p) => p.isNotEmpty ? p[0].toUpperCase() : '')
+            .join();
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+          child: Column(
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                      blurRadius: 15,
+                      spreadRadius: 3,
+                    )
+                  ],
+                ),
+                alignment: Alignment.center,
+                child: Text(initials.isEmpty ? '?' : initials,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold)),
               ),
               const SizedBox(height: 12),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                activeThumbColor: AppTheme.primaryColor,
-                title: const Text('Send scans to website',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                subtitle: const Text(
-                    'Every barcode scanned in the app is sent there instantly',
-                    style: TextStyle(fontSize: 11)),
-                value: enabled,
-                onChanged: (value) {
-                  SyncHelper.setEnabled(value);
-                  setLocalState(() {});
-                },
-              ),
+              Text(shopName,
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold)),
+              if (sessionController.currentUser != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                      context.l10n.t('logged_in_as',
+                          {'name': sessionController.currentUser!.name}),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).textTheme.bodySmall?.color)),
+                ),
             ],
           ),
         );
@@ -398,164 +666,568 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _exportBackup(BuildContext context) async {
-    final json = BackupHelper.exportAsJson();
-    await Clipboard.setData(ClipboardData(text: json));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
-            'Backup copied to clipboard - paste it somewhere safe (notes, chat to yourself, etc.)'),
-        backgroundColor: Colors.green));
+  Widget _buildSecurity(AppSettings settings) {
+    final l10n = context.l10n;
+    final multi = sessionController.isMultiUser;
+    final hasPin = PinHelper.hasAppPin;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (multi)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.groups_outlined,
+                      size: 18, color: AppTheme.primaryColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(l10n.t('multi_user_active'),
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.lock_outline),
+            title: Text(l10n.t('pin_lock'),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(l10n.t('pin_lock_hint'),
+                style: const TextStyle(fontSize: 11)),
+            value: settings.pinEnabled && hasPin,
+            onChanged: multi ? null : _togglePin,
+          ),
+          if (!multi)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _setOrChangePin,
+                    icon: const Icon(Icons.password, size: 18),
+                    label:
+                        Text(hasPin ? l10n.t('change_pin') : l10n.t('set_pin')),
+                  ),
+                ),
+                if (hasPin) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _removePin,
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red),
+                      icon: const Icon(Icons.lock_open, size: 18),
+                      label: Text(l10n.t('remove_pin')),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          if (sessionController.canLock)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  onPressed: () => sessionController.lock(),
+                  icon: const Icon(Icons.lock, size: 18),
+                  label: Text(l10n.t('lock_app')),
+                ),
+              ),
+            ),
+          const Divider(height: 24),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.manage_accounts_outlined),
+            title: Text(l10n.t('multi_user'),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(l10n.t('multi_user_hint'),
+                style: const TextStyle(fontSize: 11)),
+            trailing: Icon(Icons.adaptive.arrow_forward, size: 18),
+            onTap: () => context.push('/users'),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _importBackup(BuildContext context) async {
-    final controller = TextEditingController();
-    final clipboard = await Clipboard.getData('text/plain');
-    if (clipboard?.text != null && clipboard!.text!.trim().startsWith('{')) {
-      controller.text = clipboard.text!;
-    }
-
-    if (!context.mounted) return;
-    await showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Import Backup'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: TextField(
-              controller: controller,
-              maxLines: 8,
-              decoration: const InputDecoration(
-                  hintText: 'Paste your exported backup JSON here'),
-            ),
+  Widget _buildPrinter() {
+    final l10n = context.l10n;
+    final box = HiveDatabase.settingsBox;
+    return BlocConsumer<PrinterBloc, PrinterState>(
+      listener: (context, state) {
+        if (state.errorMessage != null &&
+            (state.status == PrinterStatus.scanFailure ||
+                state.status == PrinterStatus.connectionFailure)) {
+          _snack(state.errorMessage!, color: Colors.red);
+        } else if (state.status == PrinterStatus.connected) {
+          _snack(l10n.t('connected_to_printer'), color: Colors.green);
+        }
+      },
+      builder: (context, state) {
+        final busy = state.status == PrinterStatus.scanning ||
+            state.status == PrinterStatus.connecting ||
+            state.status == PrinterStatus.testPrinting;
+        final paperWidth = box.get('paper_width') as int? ?? 58;
+        final autoPrint = box.get('auto_print') == true;
+        return _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.print,
+                    color: state.connectedMac != null
+                        ? Colors.teal
+                        : Theme.of(context).disabledColor),
+                title: Text(l10n.t('print_device'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                subtitle: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        state.connectedMac != null
+                            ? (state.connectedName ??
+                                l10n.t('printer_connected'))
+                            : l10n.t('no_printer_connected'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (state.connectedMac != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                            color: Colors.teal.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10)),
+                        child: Text(l10n.t('connected'),
+                            style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.teal)),
+                      ),
+                    ],
+                  ],
+                ),
+                trailing: busy
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : IconButton(
+                        tooltip: l10n.t('bluetooth_settings'),
+                        icon: const Icon(Icons.settings_bluetooth),
+                        onPressed: () =>
+                            device_settings.AppSettings.openAppSettings(
+                                type: device_settings
+                                    .AppSettingsType.bluetooth),
+                      ),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : _choosePrinter,
+                    icon: const Icon(Icons.bluetooth_searching, size: 18),
+                    label: Text(l10n.t('choose_printer')),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: busy
+                        ? null
+                        : () => context
+                            .read<PrinterBloc>()
+                            .add(RefreshPrinterEvent()),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: Text(l10n.t('refresh')),
+                  ),
+                  if (state.connectedMac != null) ...[
+                    OutlinedButton.icon(
+                      onPressed: busy
+                          ? null
+                          : () => context
+                              .read<PrinterBloc>()
+                              .add(TestPrintEvent(_shopName())),
+                      icon: const Icon(Icons.receipt_long, size: 18),
+                      label: Text(l10n.t('test_print')),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: busy
+                          ? null
+                          : () => context
+                              .read<PrinterBloc>()
+                              .add(DisconnectPrinterEvent()),
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red),
+                      icon: const Icon(Icons.link_off, size: 18),
+                      label: Text(l10n.t('disconnect')),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              _label(l10n.t('paper_width')),
+              const SizedBox(height: 6),
+              SegmentedButton<int>(
+                segments: const [
+                  ButtonSegment(value: 58, label: Text('58 mm')),
+                  ButtonSegment(value: 80, label: Text('80 mm')),
+                ],
+                selected: {paperWidth == 80 ? 80 : 58},
+                onSelectionChanged: (s) async {
+                  final w = s.first;
+                  await box.put('paper_width', w);
+                  if (mounted) setState(() {});
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(l10n.t('paper_width_hint'),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).textTheme.bodySmall?.color)),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.t('auto_print'),
+                    style: const TextStyle(fontSize: 13)),
+                subtitle: Text(l10n.t('auto_print_hint'),
+                    style: const TextStyle(fontSize: 11)),
+                value: autoPrint,
+                onChanged: (v) async {
+                  await box.put('auto_print', v);
+                  if (mounted) setState(() {});
+                },
+              ),
+              Text(l10n.t('thermal_latin_note'),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: Theme.of(context).textTheme.bodySmall?.color)),
+              const SizedBox(height: 4),
+              Text(l10n.t('connect_hint'),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                      color: Theme.of(context).textTheme.bodySmall?.color)),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                final navigator = Navigator.of(dialogContext);
-                try {
-                  final summary =
-                      await BackupHelper.importFromJson(controller.text);
-                  navigator.pop();
-                  if (!context.mounted) return;
-                  // Refresh every bloc so the imported data shows up immediately.
-                  context.read<ProductBloc>().add(LoadProducts());
-                  context.read<SaleBloc>().add(LoadSales());
-                  context.read<CustomerBloc>().add(LoadCustomers());
-                  context.read<ShopBloc>().add(LoadShopEvent());
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(
-                          'Imported ${summary.productsImported} products, '
-                          '${summary.salesImported} sales, '
-                          '${summary.customersImported} customers'),
-                      backgroundColor: Colors.green));
-                } catch (e) {
-                  navigator.pop();
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('Import failed: invalid backup text'),
-                      backgroundColor: Colors.red));
-                }
-              },
-              child: const Text('Restore'),
-            ),
-          ],
         );
       },
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Text(
-          title.toUpperCase(),
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-              letterSpacing: 1.2),
+  Widget _buildBackup() {
+    final l10n = context.l10n;
+    final last = BackupHelper.lastBackupAt();
+    final lastText = last == null
+        ? l10n.t('never')
+        : DateFormat('dd/MM/yyyy HH:mm').format(last);
+    return _card(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          _tile(
+            icon: Icons.upload_file_outlined,
+            title: l10n.t('export_backup'),
+            subtitle: l10n.t('export_backup_subtitle'),
+            trailing: _backingUp
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : null,
+            onTap: _backingUp ? null : _exportBackup,
+          ),
+          _divider(),
+          _tile(
+            icon: Icons.content_copy_outlined,
+            title: l10n.t('backup_copy_clipboard'),
+            onTap: _copyBackupToClipboard,
+          ),
+          _divider(),
+          _tile(
+            icon: Icons.folder_open_outlined,
+            title: l10n.t('import_backup'),
+            subtitle: '${l10n.t('pick_file')} · ${l10n.t('import_backup_subtitle')}',
+            onTap: _importFromFile,
+          ),
+          _divider(),
+          _tile(
+            icon: Icons.paste_outlined,
+            title: l10n.t('paste_text'),
+            subtitle: l10n.t('import_hint'),
+            onTap: _importFromText,
+          ),
+          _divider(),
+          _tile(
+            icon: Icons.history,
+            title: l10n.t('local_backups'),
+            subtitle: l10n.t('last_backup', {'time': lastText}),
+            onTap: _showLocalBackups,
+          ),
+          _divider(),
+          SwitchListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            secondary: const Icon(Icons.schedule_outlined),
+            title: Text(l10n.t('auto_backup'),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(l10n.t('auto_backup_hint'),
+                style: const TextStyle(fontSize: 11)),
+            value: BackupHelper.isAutoBackupEnabled(),
+            onChanged: (v) async {
+              await BackupHelper.setAutoBackupEnabled(v);
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSync() {
+    final l10n = context.l10n;
+    final token = SyncHelper.getOrCreateToken();
+    final scansEnabled = SyncHelper.isEnabled();
+    final fullSync = SyncHelper.isFullSyncEnabled();
+    final autoSync = SyncHelper.isAutoSyncEnabled();
+    final pending = SyncHelper.pendingCount;
+    final last = SyncHelper.lastSyncAt();
+    final lastText = last == null
+        ? l10n.t('never')
+        : DateFormat('dd/MM/yyyy HH:mm').format(last);
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _label(l10n.t('your_token')),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(token,
+                      textDirection: TextDirection.ltr,
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 12)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.copy, size: 20),
+                tooltip: l10n.t('copy_token'),
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: token));
+                  _snack(l10n.t('token_copied'), color: Colors.green);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(l10n.t('token_hint'),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).textTheme.bodySmall?.color)),
+          const SizedBox(height: 16),
+          _label(l10n.t('website_url')),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _syncUrlController,
+            keyboardType: TextInputType.url,
+            textDirection: TextDirection.ltr,
+            decoration: InputDecoration(
+              hintText: 'https://your-website.com',
+              isDense: true,
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onChanged: (value) => SyncHelper.setUrl(value.trim()),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.t('send_scans'),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(l10n.t('send_scans_hint'),
+                style: const TextStyle(fontSize: 11)),
+            value: scansEnabled,
+            onChanged: (v) async {
+              await SyncHelper.setEnabled(v);
+              if (mounted) setState(() {});
+            },
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.t('full_sync'),
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(l10n.t('full_sync_hint'),
+                style: const TextStyle(fontSize: 11)),
+            value: fullSync,
+            onChanged: (v) async {
+              await SyncHelper.setFullSyncEnabled(v);
+              if (v && pending == 0) await SyncHelper.enqueueEverything();
+              if (mounted) setState(() {});
+            },
+          ),
+          if (fullSync) ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.t('auto_sync'),
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text(l10n.t('auto_sync_hint'),
+                  style: const TextStyle(fontSize: 11)),
+              value: autoSync,
+              onChanged: (v) async {
+                await SyncHelper.setAutoSyncEnabled(v);
+                if (mounted) setState(() {});
+              },
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${l10n.t('last_sync', {'time': lastText})}\n${l10n.t('sync_pending', {'count': pending})}',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).textTheme.bodySmall?.color),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: _syncing ? null : _syncNow,
+                  icon: _syncing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.sync, size: 18),
+                  label: Text(l10n.t('sync_now')),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              onPressed: _resendAll,
+              icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+              label: Text(l10n.t('resend_all')),
+            ),
+            Text(l10n.t('resend_all_hint'),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).textTheme.bodySmall?.color)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------- helpers
+
+  Widget _header(String title) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+        child: Text(title.toUpperCase(),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+                color: Theme.of(context).textTheme.bodySmall?.color)),
+      );
+
+  Widget _label(String text) => Text(text,
+      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13));
+
+  Widget _card({required Widget child, EdgeInsetsGeometry? padding}) =>
+      Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: padding ?? const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.4)),
         ),
-      ),
-    );
-  }
+        child: child,
+      );
 
-  Widget _buildListGroup({required List<Widget> children}) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[100]!),
-      ),
-      child: Column(children: children),
-    );
-  }
+  Widget _group(List<Widget> tiles) => _card(
+        padding: EdgeInsets.zero,
+        child: Column(
+          children: [
+            for (int i = 0; i < tiles.length; i++) ...[
+              if (i > 0) _divider(),
+              tiles[i],
+            ],
+          ],
+        ),
+      );
 
-  Widget _buildDivider() {
-    return Divider(height: 1, thickness: 1, color: Colors.grey[50], indent: 64);
-  }
+  Widget _divider() => Divider(
+      height: 1,
+      indent: 56,
+      color: Theme.of(context).dividerColor.withValues(alpha: 0.4));
 
-  Widget _buildListItem({
+  Widget _tile({
     required IconData icon,
     required String title,
     String? subtitle,
-    Widget? subtitleWidget,
-    Widget? trailingWidget,
-    IconData? trailingIcon = Icons.chevron_right,
+    Widget? trailing,
     VoidCallback? onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: AppTheme.primaryColor, size: 20),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14)),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(subtitle,
-                        style:
-                            TextStyle(fontSize: 12, color: Colors.grey[500])),
-                  ],
-                  if (subtitleWidget != null) ...[
-                    const SizedBox(height: 4),
-                    subtitleWidget,
-                  ]
-                ],
-              ),
-            ),
-            if (trailingWidget != null)
-              trailingWidget
-            else if (trailingIcon != null)
-              Icon(trailingIcon, color: Colors.grey[300]),
-          ],
-        ),
-      ),
+    bool showChevron = true,
+  }) =>
+      ListTile(
+        leading: Icon(icon, color: AppTheme.primaryColor),
+        title: Text(title,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: subtitle == null
+            ? null
+            : Text(subtitle, style: const TextStyle(fontSize: 12)),
+        trailing: trailing ??
+            (showChevron && onTap != null
+                ? Icon(Icons.adaptive.arrow_forward,
+                    size: 18, color: Theme.of(context).disabledColor)
+                : null),
+        onTap: onTap,
+      );
+}
+
+class _LanguagePicker extends StatelessWidget {
+  final Locale? current;
+  const _LanguagePicker({required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final options = <MapEntry<String?, String>>[
+      MapEntry(null, l10n.t('system_language')),
+      MapEntry('ar', l10n.t('arabic')),
+      MapEntry('fr', l10n.t('french')),
+      MapEntry('en', l10n.t('english')),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      children: [
+        for (final o in options)
+          ChoiceChip(
+            label: Text(o.value),
+            selected: current?.languageCode == o.key,
+            onSelected: (_) =>
+                appSettings.setLocale(o.key == null ? null : Locale(o.key!)),
+          ),
+      ],
     );
   }
 }
