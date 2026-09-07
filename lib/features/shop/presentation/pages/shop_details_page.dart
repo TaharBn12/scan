@@ -1,12 +1,14 @@
-import 'package:billing_app/core/widgets/input_label.dart';
-import 'package:billing_app/core/widgets/primary_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import '../../domain/entities/shop.dart';
-import '../bloc/shop_bloc.dart';
+
+import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
+import '../../../../core/widgets/input_label.dart';
+import '../../../../core/widgets/primary_button.dart';
+import '../../domain/entities/shop.dart';
+import '../bloc/shop_bloc.dart';
 
 class ShopDetailsPage extends StatefulWidget {
   const ShopDetailsPage({super.key});
@@ -17,36 +19,36 @@ class ShopDetailsPage extends StatefulWidget {
 
 class _ShopDetailsPageState extends State<ShopDetailsPage> {
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _address1Controller;
-  late TextEditingController _address2Controller;
-  late TextEditingController _phoneController;
-  late TextEditingController _upiController;
-  late TextEditingController _footerController;
+  final _nameController = TextEditingController();
+  final _address1Controller = TextEditingController();
+  final _address2Controller = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _taxIdController = TextEditingController();
+  final _paymentIdController = TextEditingController();
+  final _footerController = TextEditingController();
+  bool _filled = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController();
-    _address1Controller = TextEditingController();
-    _address2Controller = TextEditingController();
-    _phoneController = TextEditingController();
-    _upiController = TextEditingController();
-    _footerController = TextEditingController();
-
-    // Load shop data
-    context.read<ShopBloc>().add(LoadShopEvent());
+    final state = context.read<ShopBloc>().state;
+    if (state is ShopLoaded) {
+      _fill(state.shop);
+    } else {
+      context.read<ShopBloc>().add(LoadShopEvent());
+    }
   }
 
-  void _updateControllers(Shop shop) {
-    if (_nameController.text.isEmpty && shop.name.isNotEmpty) {
-      _nameController.text = shop.name;
-      _address1Controller.text = shop.addressLine1;
-      _address2Controller.text = shop.addressLine2;
-      _phoneController.text = shop.phoneNumber;
-      _upiController.text = shop.upiId;
-      _footerController.text = shop.footerText;
-    }
+  void _fill(Shop shop) {
+    if (_filled) return;
+    _filled = true;
+    _nameController.text = shop.name;
+    _address1Controller.text = shop.addressLine1;
+    _address2Controller.text = shop.addressLine2;
+    _phoneController.text = shop.phoneNumber;
+    _taxIdController.text = shop.taxId;
+    _paymentIdController.text = shop.upiId;
+    _footerController.text = shop.footerText;
   }
 
   @override
@@ -55,143 +57,162 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
     _address1Controller.dispose();
     _address2Controller.dispose();
     _phoneController.dispose();
-    _upiController.dispose();
+    _taxIdController.dispose();
+    _paymentIdController.dispose();
     _footerController.dispose();
     super.dispose();
   }
 
-  void _saveShop() {
-    if (_formKey.currentState!.validate()) {
-      final shop = Shop(
-        name: _nameController.text,
-        addressLine1: _address1Controller.text,
-        addressLine2: _address2Controller.text,
-        phoneNumber: _phoneController.text,
-        upiId: _upiController.text,
-        footerText: _footerController.text,
-      );
-
-      context.read<ShopBloc>().add(UpdateShopEvent(shop));
-    }
+  void _save() {
+    if (!_formKey.currentState!.validate()) return;
+    final shop = Shop(
+      name: _nameController.text.trim(),
+      addressLine1: _address1Controller.text.trim(),
+      addressLine2: _address2Controller.text.trim(),
+      phoneNumber: _phoneController.text.trim(),
+      taxId: _taxIdController.text.trim(),
+      upiId: _paymentIdController.text.trim(),
+      footerText: _footerController.text.trim(),
+    );
+    context.read<ShopBloc>().add(UpdateShopEvent(shop));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('Shop Details'),
+      appBar: AppBar(
+        title: Text(l10n.t('shop_details')),
+        centerTitle: true,
+        leading: IconButton(
+          icon: Icon(Icons.adaptive.arrow_back, color: theme.primaryColor),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/settings'),
         ),
-        body: BlocConsumer<ShopBloc, ShopState>(
-          listener: (context, state) {
-            if (state is ShopLoaded) {
-              _updateControllers(state.shop);
-            } else if (state is ShopOperationSuccess) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('Shop details saved!'),
-                  backgroundColor: Colors.green));
-              context.pop();
-            } else if (state is ShopError) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(state.message), backgroundColor: Colors.red));
-            }
-          },
-          buildWhen: (previous, current) =>
-              current is ShopLoading || current is ShopLoaded,
-          builder: (context, state) {
-            if (state is ShopLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('General Information',
-                        style: TextStyle(
+      ),
+      body: BlocConsumer<ShopBloc, ShopState>(
+        listener: (context, state) {
+          if (state is ShopLoaded) {
+            _fill(state.shop);
+          } else if (state is ShopOperationSuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(l10n.t('shop_saved')),
+                backgroundColor: Colors.green));
+            // Reload so the rest of the app sees the new details.
+            context.read<ShopBloc>().add(LoadShopEvent());
+            if (context.canPop()) context.pop();
+          } else if (state is ShopError) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(l10n.t(state.message)),
+                backgroundColor: Colors.red));
+          }
+        },
+        buildWhen: (previous, current) =>
+            current is ShopLoading || current is ShopLoaded,
+        builder: (context, state) {
+          if (state is ShopLoading && !_filled) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(l10n.t('general_information').toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: AppTheme.primaryColor.withValues(alpha: 0.8),
+                      )),
+                  const SizedBox(height: 5),
+                  Text(l10n.t('shop_details_hint'),
+                      style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                          color: AppTheme.primaryColor.withValues(alpha: 0.8),
-                        )),
-                    const SizedBox(
-                      height: 5,
-                    ),
-                    Text(
-                      'These details will appear on your digital and printed receipts.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                    ),
-                    const SizedBox(height: 24),
-                    const InputLabel(text: 'Shop Name'),
-                    _buildTextField(
-                      controller: _nameController,
-                      hint: 'e.g. QuickMart Superstore',
-                      validator: AppValidators.required('Required'),
-                    ),
-                    const SizedBox(height: 15),
-                    const InputLabel(text: 'Address Line 1'),
-                    _buildTextField(
-                      controller: _address1Controller,
-                      hint: 'Samrajpet, Mecheri',
-                      validator: AppValidators.required('Required'),
-                    ),
-                    const SizedBox(height: 15),
-                    const InputLabel(text: 'Address Line 2 (Optional)'),
-                    _buildTextField(
-                      controller: _address2Controller,
-                      hint: 'Salem - 636453',
-                    ),
-                    const SizedBox(height: 15),
-                    const InputLabel(text: 'Phone Number'),
-                    _buildTextField(
-                      controller: _phoneController,
-                      hint: '+91 7010674588',
-                      keyboardType: TextInputType.phone,
-                      validator: AppValidators.required('Required'),
-                    ),
-                    const SizedBox(height: 15),
-                    const InputLabel(text: 'UPI ID'),
-                    _buildTextField(
-                      controller: _upiController,
-                      hint: 'dineshsowndar@oksbi',
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const InputLabel(text: 'Receipt Footer Text'),
-                        Text('Max 150 chars',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[400])),
-                      ],
-                    ),
-                    _buildTextField(
-                      controller: _footerController,
-                      hint: 'Thank you, Visit again!!!',
-                      maxLines: 2,
-                      maxLength: 60,
-                    ),
-                  ],
-                ),
+                          color: theme.textTheme.bodySmall?.color)),
+                  const SizedBox(height: 24),
+                  InputLabel(text: l10n.t('shop_name')),
+                  _field(
+                    controller: _nameController,
+                    hint: l10n.t('shop_name_hint'),
+                    validator:
+                        AppValidators.required(l10n.t('required_field')),
+                  ),
+                  const SizedBox(height: 15),
+                  InputLabel(text: l10n.t('address_line_1')),
+                  _field(
+                    controller: _address1Controller,
+                    hint: l10n.t('address_line_1_hint'),
+                  ),
+                  const SizedBox(height: 15),
+                  InputLabel(text: l10n.t('address_line_2')),
+                  _field(
+                    controller: _address2Controller,
+                    hint: l10n.t('address_line_2_hint'),
+                  ),
+                  const SizedBox(height: 15),
+                  InputLabel(text: l10n.t('phone_number')),
+                  _field(
+                    controller: _phoneController,
+                    hint: l10n.t('phone_hint'),
+                    keyboardType: TextInputType.phone,
+                    ltr: true,
+                  ),
+                  const SizedBox(height: 15),
+                  InputLabel(text: l10n.t('tax_id')),
+                  _field(
+                    controller: _taxIdController,
+                    hint: l10n.t('tax_id_hint'),
+                    ltr: true,
+                  ),
+                  const SizedBox(height: 15),
+                  InputLabel(text: l10n.t('payment_id')),
+                  _field(
+                    controller: _paymentIdController,
+                    hint: l10n.t('payment_id_hint'),
+                    ltr: true,
+                  ),
+                  const SizedBox(height: 15),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      InputLabel(text: l10n.t('receipt_footer')),
+                      Text(l10n.t('max_chars', {'count': 80}),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: theme.textTheme.bodySmall?.color)),
+                    ],
+                  ),
+                  _field(
+                    controller: _footerController,
+                    hint: l10n.t('receipt_footer_hint'),
+                    maxLines: 2,
+                    maxLength: 80,
+                  ),
+                ],
               ),
-            );
-          },
-        ),
-        bottomNavigationBar: PrimaryButton(
-          onPressed: _saveShop,
-          icon: Icons.save,
-          label: 'Save Details',
-        ));
+            ),
+          );
+        },
+      ),
+      bottomNavigationBar: PrimaryButton(
+        onPressed: _save,
+        icon: Icons.save,
+        label: l10n.t('save_details'),
+      ),
+    );
   }
 
-  Widget _buildTextField({
+  Widget _field({
     required TextEditingController controller,
     required String hint,
     TextInputType? keyboardType,
     int maxLines = 1,
     int? maxLength,
+    bool ltr = false,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
@@ -199,11 +220,10 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
       keyboardType: keyboardType,
       maxLines: maxLines,
       maxLength: maxLength,
-      textCapitalization: TextCapitalization.words,
+      textDirection: ltr ? TextDirection.ltr : null,
+      textCapitalization: TextCapitalization.sentences,
       validator: validator,
-      decoration: InputDecoration(
-        hintText: hint,
-      ),
+      decoration: InputDecoration(hintText: hint),
     );
   }
 }

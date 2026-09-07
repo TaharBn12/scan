@@ -18,9 +18,12 @@ class AddProduct extends ProductEvent {
 
 class UpdateProduct extends ProductEvent {
   final Product product;
-  const UpdateProduct(this.product);
+  /// When true no "product updated" toast is emitted (background updates
+  /// such as stock decrements after a sale).
+  final bool silent;
+  const UpdateProduct(this.product, {this.silent = false});
   @override
-  List<Object> get props => [product];
+  List<Object> get props => [product, silent];
 }
 
 class DeleteProduct extends ProductEvent {
@@ -28,4 +31,20 @@ class DeleteProduct extends ProductEvent {
   const DeleteProduct(this.id);
   @override
   List<Object> get props => [id];
+}
+
+class AdjustStock extends ProductEvent {
+  final String productId;
+  final double delta;
+  const AdjustStock(this.productId, this.delta);
+  @override
+  List<Object> get props => [productId, delta];
+}
+
+class AdjustStockBatch extends ProductEvent {
+  /// productId -> delta (negative = remove from stock)
+  final Map<String, double> deltas;
+  const AdjustStockBatch(this.deltas);
+  @override
+  List<Object> get props => [deltas];
 }

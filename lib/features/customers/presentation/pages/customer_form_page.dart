@@ -5,8 +5,9 @@ import 'package:uuid/uuid.dart';
 
 import '../bloc/customer_bloc.dart';
 import '../../domain/entities/customer.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/utils/app_validators.dart';
+import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/input_label.dart';
 import '../../../../core/widgets/primary_button.dart';
 
@@ -26,6 +27,7 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
   late String _phone;
   late String _address;
   late String _notes;
+  late String _creditLimit;
 
   @override
   void initState() {
@@ -34,6 +36,8 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
     _phone = widget.customer?.phone ?? '';
     _address = widget.customer?.address ?? '';
     _notes = widget.customer?.notes ?? '';
+    final limit = widget.customer?.creditLimit ?? 0;
+    _creditLimit = limit > 0 ? Money.plain(limit) : '';
   }
 
   void _submit() {
@@ -42,11 +46,13 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
 
       final customer = Customer(
         id: widget.customer?.id ?? const Uuid().v4(),
-        name: _name,
-        phone: _phone,
-        address: _address,
-        notes: _notes,
+        name: _name.trim(),
+        phone: _phone.trim(),
+        address: _address.trim(),
+        notes: _notes.trim(),
         createdAt: widget.customer?.createdAt ?? DateTime.now(),
+        creditLimit: parseAmount(_creditLimit),
+        updatedAt: DateTime.now(),
       );
 
       if (widget.isEditing) {
@@ -60,17 +66,20 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit Customer' : 'Add Customer',
+        title: Text(
+            widget.isEditing ? l10n.t('edit_customer') : l10n.t('add_customer'),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.chevron_left,
-              size: 28, color: Theme.of(context).primaryColor),
-          onPressed: () => context.pop(),
+          icon: Icon(Icons.adaptive.arrow_back,
+              color: Theme.of(context).primaryColor),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/customers'),
         ),
       ),
       body: Form(
@@ -80,42 +89,55 @@ class _CustomerFormPageState extends State<CustomerFormPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const InputLabel(text: 'Name'),
+              InputLabel(text: l10n.name),
               TextFormField(
                 initialValue: _name,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(hintText: 'Customer name'),
-                validator: AppValidators.required('Please enter a name'),
+                decoration:
+                    InputDecoration(hintText: l10n.t('customer_name_hint')),
+                validator: AppValidators.required(l10n.t('please_enter_name')),
                 onSaved: (value) => _name = value!,
               ),
               const SizedBox(height: 24),
-              const InputLabel(text: 'Phone'),
+              InputLabel(text: l10n.phone),
               TextFormField(
                 initialValue: _phone,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(hintText: 'Phone number'),
+                decoration: InputDecoration(hintText: l10n.t('phone_hint')),
                 onSaved: (value) => _phone = value ?? '',
               ),
               const SizedBox(height: 24),
-              const InputLabel(text: 'Address (optional)'),
+              InputLabel(text: '${l10n.address} (${l10n.t('optional')})'),
               TextFormField(
                 initialValue: _address,
-                decoration: const InputDecoration(hintText: 'Address'),
+                decoration: InputDecoration(hintText: l10n.t('address_hint')),
                 onSaved: (value) => _address = value ?? '',
               ),
               const SizedBox(height: 24),
-              const InputLabel(text: 'Notes (optional)'),
+              InputLabel(text: l10n.t('credit_limit')),
+              TextFormField(
+                initialValue: _creditLimit,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  hintText: l10n.t('credit_limit_hint'),
+                  suffixText: Money.symbol,
+                ),
+                validator: AppValidators.optionalAmount(l10n),
+                onSaved: (value) => _creditLimit = value ?? '',
+              ),
+              const SizedBox(height: 24),
+              InputLabel(text: '${l10n.notes} (${l10n.t('optional')})'),
               TextFormField(
                 initialValue: _notes,
                 maxLines: 3,
-                decoration:
-                    const InputDecoration(hintText: 'e.g. prefers delivery'),
+                decoration: InputDecoration(hintText: l10n.t('notes_hint')),
                 onSaved: (value) => _notes = value ?? '',
               ),
               const SizedBox(height: 32),
               PrimaryButton(
                 onPressed: _submit,
-                label: widget.isEditing ? 'Save Changes' : 'Add Customer',
+                label: widget.isEditing ? l10n.save : l10n.t('add_customer'),
                 icon: Icons.check,
               ),
             ],

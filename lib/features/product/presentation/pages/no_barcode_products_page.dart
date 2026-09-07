@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../bloc/product_bloc.dart';
 import '../../domain/entities/product.dart';
+import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../billing/presentation/bloc/billing_bloc.dart';
 import '../../../../core/widgets/primary_button.dart';
 
@@ -40,35 +43,52 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
     super.dispose();
   }
 
-  void _addToCart(BuildContext context, Product product) {
-    context.read<BillingBloc>().add(AddProductToCartEvent(product));
+  void _addToCart(BuildContext context, Product product, {double qty = 1}) {
+    context
+        .read<BillingBloc>()
+        .add(AddProductToCartEvent(product, quantity: qty));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${product.name} added to invoice'),
+        content: Text(context.l10n.t('added_to_invoice', {'name': product.name})),
         backgroundColor: Colors.green,
         duration: const Duration(milliseconds: 900),
       ),
     );
   }
 
+  /// Weighed items (kg, L...) ask for the quantity right away; pieces are
+  /// added as 1 and can be adjusted in the cart.
+  Future<void> _tapProduct(BuildContext context, Product product) async {
+    if (product.unit.allowsDecimals) {
+      final result = await showQuantityDialog(context, product: product);
+      if (result == null || !context.mounted) return;
+      _addToCart(context, product, qty: result.quantity);
+    } else {
+      _addToCart(context, product);
+    }
+  }
+
   void _confirmDelete(BuildContext context, Product product) {
+    final l10n = context.l10n;
     showDialog(
       context: context,
       builder: (innerContext) {
         return AlertDialog(
-          title: const Text('Delete Product'),
-          content: Text('Are you sure you want to delete ${product.name}?'),
+          title: Text(l10n.t('delete_product')),
+          content:
+              Text(l10n.t('delete_product_confirm', {'name': product.name})),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(innerContext),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             TextButton(
               onPressed: () {
                 context.read<ProductBloc>().add(DeleteProduct(product.id));
                 Navigator.pop(innerContext);
               },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              child:
+                  Text(l10n.delete, style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -78,6 +98,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final borderColor = Colors.grey[100]!;
 
     return Scaffold(
@@ -85,12 +106,14 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.chevron_left,
-              size: 28, color: Theme.of(context).primaryColor),
+          icon: Icon(Icons.adaptive.arrow_back,
+              color: Theme.of(context).primaryColor),
           onPressed: () => context.pop(),
         ),
         title: Text(
-          widget.selectionMode ? 'Add Without Scanning' : 'No-Barcode Products',
+          widget.selectionMode
+              ? l10n.t('add_without_scanning')
+              : l10n.t('no_barcode_products'),
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
@@ -101,9 +124,8 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: TextFormField(
               controller: _searchController,
-              textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
-                hintText: 'Search by name',
+                hintText: l10n.t('search_by_name'),
                 prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
               ),
             ),
@@ -131,10 +153,10 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                           Icon(Icons.inventory_2_outlined,
                               size: 40, color: Colors.grey[300]),
                           const SizedBox(height: 12),
-                          const Text(
-                            'No products without a barcode yet.\nTap + to add one (e.g. loose fruit, custom item).',
+                          Text(
+                            l10n.t('no_no_barcode_products'),
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
+                            style: const TextStyle(color: Colors.grey),
                           ),
                         ],
                       ),
@@ -166,10 +188,17 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
         child: const Icon(Icons.add, size: 32),
       ),
       bottomNavigationBar: widget.selectionMode
-          ? PrimaryButton(
-              onPressed: () => context.pop(),
-              icon: Icons.check_circle,
-              label: 'Done',
+          ? BlocBuilder<BillingBloc, BillingState>(
+              builder: (context, billing) {
+                final count = billing.cartItems.length;
+                return PrimaryButton(
+                  onPressed: () => context.pop(),
+                  icon: Icons.check_circle,
+                  label: count == 0
+                      ? l10n.done
+                      : '${l10n.done} · ${l10n.t('items_count', {'count': count})} · ${Money.format(billing.totalAmount)}',
+                );
+              },
             )
           : null,
     );
@@ -177,9 +206,13 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
 
   Widget _buildProductCard(
       BuildContext context, Product product, Color borderColor) {
+    final l10n = context.l10n;
+    final unit = l10n.t(product.unit.shortKey);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: widget.selectionMode ? () => _addToCart(context, product) : null,
+      onTap: widget.selectionMode
+          ? () => _tapProduct(context, product)
+          : () => context.push('/products/edit/${product.id}', extra: product),
       child: Container(
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
@@ -205,7 +238,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'DA${product.price.toStringAsFixed(2)}',
+                    '${Money.format(product.price)} / $unit',
                     style: TextStyle(
                         fontWeight: FontWeight.w500, color: Colors.grey[600]),
                   ),
@@ -213,57 +246,67 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
               ),
             ),
             if (widget.selectionMode)
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.add_shopping_cart,
-                      color: AppTheme.primaryColor, size: 20),
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.all(8),
-                  onPressed: () => _addToCart(context, product),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _iconButton(
+                    Icons.scale_outlined,
+                    AppTheme.primaryColor,
+                    () async {
+                      final result =
+                          await showQuantityDialog(context, product: product,
+                              askPrice: true);
+                      if (result == null || !context.mounted) return;
+                      context.read<BillingBloc>().add(AddProductToCartEvent(
+                          product,
+                          quantity: result.quantity,
+                          unitPrice: result.unitPrice));
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(l10n
+                            .t('added_to_invoice', {'name': product.name})),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(milliseconds: 900),
+                      ));
+                    },
+                    tooltip: l10n.t('enter_quantity'),
+                  ),
+                  const SizedBox(width: 8),
+                  _iconButton(Icons.add_shopping_cart, AppTheme.primaryColor,
+                      () => _tapProduct(context, product)),
+                ],
               )
             else
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.edit_rounded,
-                          color: AppTheme.primaryColor, size: 20),
-                      constraints: const BoxConstraints(),
-                      padding: const EdgeInsets.all(8),
-                      onPressed: () {
-                        context.push('/products/edit/${product.id}',
-                            extra: product);
-                      },
-                    ),
-                  ),
+                  _iconButton(Icons.edit_rounded, AppTheme.primaryColor, () {
+                    context.push('/products/edit/${product.id}',
+                        extra: product);
+                  }),
                   const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded,
-                          color: Colors.red, size: 20),
-                      constraints: const BoxConstraints(),
-                      padding: const EdgeInsets.all(8),
-                      onPressed: () => _confirmDelete(context, product),
-                    ),
-                  ),
+                  _iconButton(Icons.delete_outline_rounded, Colors.red,
+                      () => _confirmDelete(context, product)),
                 ],
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _iconButton(IconData icon, Color color, VoidCallback onTap,
+      {String? tooltip}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: color, size: 20),
+        tooltip: tooltip,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(8),
+        onPressed: onTap,
       ),
     );
   }

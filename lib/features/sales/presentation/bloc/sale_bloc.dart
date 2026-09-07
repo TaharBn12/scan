@@ -21,6 +21,10 @@ class SaleBloc extends Bloc<SaleEvent, SaleState> {
     on<LoadSales>(_onLoadSales);
     on<AddSale>(_onAddSale);
     on<DeleteSale>(_onDeleteSale);
+    on<SetReportPeriod>((event, emit) => emit(state.copyWith(
+        period: event.period,
+        customStart: event.start,
+        customEnd: event.end)));
   }
 
   Future<void> _onLoadSales(LoadSales event, Emitter<SaleState> emit) async {
@@ -38,7 +42,10 @@ class SaleBloc extends Bloc<SaleEvent, SaleState> {
     result.fold(
       (failure) => emit(
           state.copyWith(status: SaleStatus.error, message: failure.message)),
-      (_) => add(LoadSales()),
+      (stored) {
+        emit(state.copyWith(lastSaved: stored));
+        add(LoadSales());
+      },
     );
   }
 

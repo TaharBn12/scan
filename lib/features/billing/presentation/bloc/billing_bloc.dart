@@ -21,6 +21,7 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     on<AddProductToCartEvent>(_onAddProductToCart);
     on<RemoveProductFromCartEvent>(_onRemoveProductFromCart);
     on<UpdateQuantityEvent>(_onUpdateQuantity);
+    on<UpdateLinePriceEvent>(_onUpdateLinePrice);
     on<ClearCartEvent>(_onClearCart);
     on<PrintReceiptEvent>(_onPrintReceipt);
     on<SetDiscountEvent>((event, emit) => emit(state.copyWith(
@@ -37,6 +38,12 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
         customerPhone: event.customer.phone)));
     on<ClearCustomerEvent>(
         (event, emit) => emit(state.copyWith(clearCustomer: true)));
+    on<SetInitialPaymentEvent>(
+        (event, emit) => emit(state.copyWith(initialPayment: event.amount)));
+    on<SetSaleNoteEvent>(
+        (event, emit) => emit(state.copyWith(note: event.note)));
+    on<ClearBillingErrorEvent>(
+        (event, emit) => emit(state.copyWith(clearError: true)));
   }
 
   Future<void> _onScanBarcode(
@@ -44,7 +51,8 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     final result = await getProductByBarcodeUseCase(event.barcode);
     result.fold(
       (failure) {
-        emit(state.copyWith(error: 'Product not found: ${event.barcode}'));
+        emit(state.copyWith(
+            error: 'product_not_found', errorBarcode: event.barcode));
         SyncHelper.sendScan(barcode: event.barcode);
       },
       (product) {
@@ -61,20 +69,24 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
   void _onAddProductToCart(
       AddProductToCartEvent event, Emitter<BillingState> emit) {
     // Clear error when adding
-    final cleanState = state.copyWith(error: null);
+    final cleanState = state.copyWith(clearError: true);
+    final qty = event.quantity;
 
     final existingIndex = cleanState.cartItems
         .indexWhere((item) => item.product.id == event.product.id);
     if (existingIndex >= 0) {
       final existingItem = cleanState.cartItems[existingIndex];
-      final backendItems = List<CartItem>.from(cleanState.cartItems);
-      backendItems[existingIndex] =
-          existingItem.copyWith(quantity: existingItem.quantity + 1);
-      emit(cleanState.copyWith(cartItems: backendItems, error: null));
+      final items = List<CartItem>.from(cleanState.cartItems);
+      items[existingIndex] =
+          existingItem.copyWith(quantity: existingItem.quantity + qty);
+      emit(cleanState.copyWith(cartItems: items));
     } else {
-      final newItem = CartItem(product: event.product);
-      emit(cleanState.copyWith(
-          cartItems: [...cleanState.cartItems, newItem], error: null));
+      final newItem = CartItem(
+        product: event.product,
+        quantity: qty,
+        unitPrice: event.unitPrice,
+      );
+      emit(cleanState.copyWith(cartItems: [...cleanState.cartItems, newItem]));
     }
   }
 
@@ -102,6 +114,17 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     }
   }
 
+  void _onUpdateLinePrice(
+      UpdateLinePriceEvent event, Emitter<BillingState> emit) {
+    final index = state.cartItems
+        .indexWhere((item) => item.product.id == event.productId);
+    if (index >= 0 && event.unitPrice >= 0) {
+      final items = List<CartItem>.from(state.cartItems);
+      items[index] = items[index].copyWith(unitPrice: event.unitPrice);
+      emit(state.copyWith(cartItems: items));
+    }
+  }
+
   void _onClearCart(ClearCartEvent event, Emitter<BillingState> emit) {
     emit(const BillingState());
   }
@@ -115,15 +138,12 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
       if (savedMac != null) {
         final connected = await printerHelper.connect(savedMac);
         if (!connected) {
-          emit(state.copyWith(
-              error: 'Failed to auto-connect to printer!', clearError: false));
+          emit(state.copyWith(error: 'printer_connect_failed'));
           emit(state.copyWith(clearError: true));
           return;
         }
       } else {
-        emit(state.copyWith(
-            error: 'Printer not connected & no saved printer found!',
-            clearError: false));
+        emit(state.copyWith(error: 'no_printer'));
         emit(state.copyWith(clearError: true));
         return;
       }
@@ -137,7 +157,8 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
           .map((item) => {
                 'name': item.product.name,
                 'qty': item.quantity,
-                'price': item.product.price,
+                'unit': item.product.unit.name,
+                'price': item.unitPrice,
                 'total': item.total,
               })
           .toList();
@@ -156,8 +177,7 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
 
       emit(state.copyWith(isPrinting: false, printSuccess: true));
     } catch (e) {
-      emit(state.copyWith(
-          isPrinting: false, error: 'Print failed: $e', clearError: false));
+      emit(state.copyWith(isPrinting: false, error: 'print_failed:$e'));
       // Reset error instantly avoids sticky error
       emit(state.copyWith(clearError: true));
     }

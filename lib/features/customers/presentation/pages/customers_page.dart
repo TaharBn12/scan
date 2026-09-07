@@ -4,14 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import '../bloc/customer_bloc.dart';
 import '../../domain/entities/customer.dart';
+import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/money.dart';
+import '../../../sales/presentation/bloc/sale_bloc.dart';
 
 /// Lists saved customers.
 ///
 /// - selectionMode = true  -> opened from Checkout: tapping a customer
 ///   pops this page back with the selected [Customer].
-/// - selectionMode = false -> opened from Settings/Management: tapping a
-///   customer opens their detail page (purchase history, totals).
+/// - selectionMode = false -> opened from the menu: tapping a customer opens
+///   their detail page (purchase history, debts, statement).
 class CustomersPage extends StatefulWidget {
   final bool selectionMode;
   const CustomersPage({super.key, this.selectionMode = false});
@@ -23,6 +27,7 @@ class CustomersPage extends StatefulWidget {
 class _CustomersPageState extends State<CustomersPage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  bool _onlyDebtors = false;
 
   @override
   void initState() {
@@ -39,24 +44,26 @@ class _CustomersPageState extends State<CustomersPage> {
   }
 
   void _confirmDelete(BuildContext context, Customer customer) {
+    final l10n = context.l10n;
     showDialog(
       context: context,
       builder: (innerContext) {
         return AlertDialog(
-          title: const Text('Delete Customer'),
-          content: Text('Are you sure you want to delete ${customer.name}?'),
+          title: Text(l10n.t('delete_customer')),
+          content:
+              Text(l10n.t('delete_customer_confirm', {'name': customer.name})),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(innerContext),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             TextButton(
               onPressed: () {
                 context.read<CustomerBloc>().add(DeleteCustomer(customer.id));
                 Navigator.pop(innerContext);
               },
-              child:
-                  const Text('Delete', style: TextStyle(color: Colors.red)),
+              child: Text(l10n.delete,
+                  style: const TextStyle(color: Colors.red)),
             ),
           ],
         );
@@ -66,22 +73,33 @@ class _CustomersPageState extends State<CustomersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = Colors.grey[100]!;
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.chevron_left,
-              size: 28, color: Theme.of(context).primaryColor),
-          onPressed: () => context.pop(),
+          icon: Icon(Icons.adaptive.arrow_back, color: theme.primaryColor),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/menu'),
         ),
         title: Text(
-          widget.selectionMode ? 'Select Customer' : 'Customers',
+          widget.selectionMode ? l10n.t('select_customer') : l10n.customers,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: l10n.t('debts'),
+            icon: Icon(
+              _onlyDebtors ? Icons.money_off : Icons.money_off_csred_outlined,
+              color: _onlyDebtors ? Colors.red : null,
+            ),
+            onPressed: () => setState(() => _onlyDebtors = !_onlyDebtors),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -90,8 +108,14 @@ class _CustomersPageState extends State<CustomersPage> {
             child: TextFormField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Search by name or phone',
+                hintText: l10n.t('search_name_phone'),
                 prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: _searchController.clear,
+                      ),
               ),
             ),
           ),
@@ -103,11 +127,24 @@ class _CustomersPageState extends State<CustomersPage> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final customers = state.customers
-                    .where((c) =>
-                        c.name.toLowerCase().contains(_searchQuery) ||
-                        c.phone.toLowerCase().contains(_searchQuery))
-                    .toList();
+                final saleState = context.watch<SaleBloc>().state;
+                final debtByCustomer = <String, double>{};
+                for (final s in saleState.unpaidCreditSales) {
+                  if (s.customerId == null) continue;
+                  debtByCustomer[s.customerId!] =
+                      (debtByCustomer[s.customerId!] ?? 0) + s.amountDue;
+                }
+
+                final customers = state.customers.where((c) {
+                  if (_onlyDebtors && (debtByCustomer[c.id] ?? 0) <= 0) {
+                    return false;
+                  }
+                  if (_searchQuery.isEmpty) return true;
+                  return c.name.toLowerCase().contains(_searchQuery) ||
+                      c.phone.toLowerCase().contains(_searchQuery);
+                }).toList()
+                  ..sort((a, b) =>
+                      a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
                 if (customers.isEmpty) {
                   return Center(
@@ -117,12 +154,14 @@ class _CustomersPageState extends State<CustomersPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.people_outline,
-                              size: 40, color: Colors.grey[300]),
+                              size: 48, color: theme.disabledColor),
                           const SizedBox(height: 12),
-                          const Text(
-                            'No customers yet.\nTap + to add one.',
+                          Text(
+                            _onlyDebtors
+                                ? l10n.t('no_outstanding_credit')
+                                : l10n.t('no_customers'),
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey),
+                            style: TextStyle(color: theme.disabledColor),
                           ),
                         ],
                       ),
@@ -130,15 +169,51 @@ class _CustomersPageState extends State<CustomersPage> {
                   );
                 }
 
+                final totalDebt = debtByCustomer.values
+                    .fold(0.0, (s, v) => s + v);
+
                 return ListView.separated(
                   padding: const EdgeInsets.only(
-                      left: 16, right: 16, top: 8, bottom: 100),
-                  itemCount: customers.length,
+                      left: 16, right: 16, top: 4, bottom: 100),
+                  itemCount: customers.length + 1,
                   separatorBuilder: (context, index) =>
                       const SizedBox(height: 10),
                   itemBuilder: (context, index) {
-                    final customer = customers[index];
-                    return _buildCustomerCard(context, customer, borderColor);
+                    if (index == 0) {
+                      if (totalDebt <= 0 || widget.selectionMode) {
+                        return const SizedBox.shrink();
+                      }
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.account_balance_wallet_outlined,
+                                color: Colors.red),
+                            const SizedBox(width: 10),
+                            Expanded(
+                                child: Text(l10n.t('total_outstanding'),
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600))),
+                            Text(Money.format(totalDebt),
+                                style: const TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      );
+                    }
+                    final customer = customers[index - 1];
+                    return _CustomerCard(
+                      customer: customer,
+                      debt: debtByCustomer[customer.id] ?? 0,
+                      selectionMode: widget.selectionMode,
+                      onDelete: () => _confirmDelete(context, customer),
+                    );
                   },
                 );
               },
@@ -151,17 +226,36 @@ class _CustomersPageState extends State<CustomersPage> {
         backgroundColor: AppTheme.primaryColor,
         foregroundColor: Colors.white,
         shape: const CircleBorder(),
+        tooltip: l10n.t('add_customer'),
         child: const Icon(Icons.add, size: 32),
       ),
     );
   }
+}
 
-  Widget _buildCustomerCard(
-      BuildContext context, Customer customer, Color borderColor) {
+class _CustomerCard extends StatelessWidget {
+  final Customer customer;
+  final double debt;
+  final bool selectionMode;
+  final VoidCallback onDelete;
+
+  const _CustomerCard({
+    required this.customer,
+    required this.debt,
+    required this.selectionMode,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    final overLimit = customer.creditLimit > 0 && debt > customer.creditLimit;
+
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () {
-        if (widget.selectionMode) {
+        if (selectionMode) {
           context.pop(customer);
         } else {
           context.push('/customers/detail/${customer.id}', extra: customer);
@@ -169,9 +263,9 @@ class _CustomersPageState extends State<CustomersPage> {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
+          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
           boxShadow: const [
             BoxShadow(
                 color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
@@ -184,9 +278,7 @@ class _CustomersPageState extends State<CustomersPage> {
               radius: 20,
               backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
               child: Text(
-                customer.name.isNotEmpty
-                    ? customer.name[0].toUpperCase()
-                    : '?',
+                customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
                 style: const TextStyle(
                     color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
               ),
@@ -203,27 +295,42 @@ class _CustomersPageState extends State<CustomersPage> {
                     const SizedBox(height: 2),
                     Text(customer.phone,
                         style: TextStyle(
-                            fontSize: 12, color: Colors.grey[600])),
+                            fontSize: 12,
+                            color: theme.textTheme.bodySmall?.color)),
+                  ],
+                  if (debt > 0) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '${l10n.t('outstanding_credit')}: ${Money.format(debt)}'
+                      '${overLimit ? ' ⚠' : ''}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: overLimit ? Colors.red : Colors.orange[800]),
+                    ),
                   ],
                 ],
               ),
             ),
-            if (widget.selectionMode)
+            if (selectionMode)
               const Icon(Icons.chevron_right, color: Colors.grey)
-            else
+            else if (sessionController.isAdmin)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
                     icon: const Icon(Icons.edit_rounded,
                         color: AppTheme.primaryColor, size: 20),
-                    onPressed: () => context.push('/customers/edit/${customer.id}',
+                    tooltip: l10n.edit,
+                    onPressed: () => context.push(
+                        '/customers/edit/${customer.id}',
                         extra: customer),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline_rounded,
                         color: Colors.red, size: 20),
-                    onPressed: () => _confirmDelete(context, customer),
+                    tooltip: l10n.delete,
+                    onPressed: onDelete,
                   ),
                 ],
               ),

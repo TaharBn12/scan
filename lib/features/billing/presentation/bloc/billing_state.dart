@@ -2,7 +2,10 @@ part of 'billing_bloc.dart';
 
 class BillingState extends Equatable {
   final List<CartItem> cartItems;
+  /// Either a localization key ('product_not_found', 'no_printer', ...) or
+  /// 'print_failed:<details>'. UI translates it.
   final String? error;
+  final String? errorBarcode;
   final bool isPrinting;
   final bool printSuccess;
   final double discountValue;
@@ -11,10 +14,13 @@ class BillingState extends Equatable {
   final String? customerId;
   final String? customerName;
   final String? customerPhone;
+  final double initialPayment;
+  final String note;
 
   const BillingState({
     this.cartItems = const [],
     this.error,
+    this.errorBarcode,
     this.isPrinting = false,
     this.printSuccess = false,
     this.discountValue = 0,
@@ -23,9 +29,14 @@ class BillingState extends Equatable {
     this.customerId,
     this.customerName,
     this.customerPhone,
+    this.initialPayment = 0,
+    this.note = '',
   });
 
   double get subtotal => cartItems.fold(0, (sum, item) => sum + item.total);
+
+  double get totalQuantity =>
+      cartItems.fold(0, (sum, item) => sum + item.quantity);
 
   double get discountAmount {
     if (discountValue <= 0 || subtotal <= 0) return 0;
@@ -39,6 +50,7 @@ class BillingState extends Equatable {
   BillingState copyWith({
     List<CartItem>? cartItems,
     String? error,
+    String? errorBarcode,
     bool clearError = false,
     bool? isPrinting,
     bool? printSuccess,
@@ -50,10 +62,13 @@ class BillingState extends Equatable {
     String? customerName,
     String? customerPhone,
     bool clearCustomer = false,
+    double? initialPayment,
+    String? note,
   }) {
     return BillingState(
       cartItems: cartItems ?? this.cartItems,
       error: clearError ? null : (error ?? this.error),
+      errorBarcode: clearError ? null : (errorBarcode ?? this.errorBarcode),
       isPrinting: isPrinting ?? this.isPrinting,
       printSuccess: printSuccess ?? this.printSuccess,
       discountValue: discountValue ?? this.discountValue,
@@ -66,6 +81,8 @@ class BillingState extends Equatable {
           clearCustomer ? null : (customerName ?? this.customerName),
       customerPhone:
           clearCustomer ? null : (customerPhone ?? this.customerPhone),
+      initialPayment: initialPayment ?? this.initialPayment,
+      note: note ?? this.note,
     );
   }
 
@@ -73,6 +90,7 @@ class BillingState extends Equatable {
   List<Object?> get props => [
         cartItems,
         error,
+        errorBarcode,
         isPrinting,
         printSuccess,
         discountValue,
@@ -81,5 +99,7 @@ class BillingState extends Equatable {
         customerId,
         customerName,
         customerPhone,
+        initialPayment,
+        note,
       ];
 }
