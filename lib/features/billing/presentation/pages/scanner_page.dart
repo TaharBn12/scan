@@ -3,6 +3,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:go_router/go_router.dart';
 import 'package:vibration/vibration.dart';
 
+import '../../../../core/l10n/app_localizations.dart';
+
 class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key});
 
@@ -49,12 +51,13 @@ class _ScannerPageState extends State<ScannerPage> {
     return Scaffold(
       appBar: AppBar(
           leading: IconButton(
-            icon: Icon(Icons.chevron_left,
-                size: 28, color: Theme.of(context).primaryColor),
+            icon: Icon(Icons.adaptive.arrow_back,
+                color: Theme.of(context).primaryColor),
             onPressed: () => context.pop(),
           ),
-          title: const Text('Scan Barcode',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+          title: Text(context.l10n.t('scan_barcode'),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
       body: Stack(
         children: [
           MobileScanner(
@@ -100,14 +103,14 @@ class _ScannerPageState extends State<ScannerPage> {
               ),
             ),
           ),
-          const Positioned(
+          Positioned(
             bottom: 40,
             left: 0,
             right: 0,
             child: Text(
-              'Align barcode within frame',
+              context.l10n.t('align_barcode'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: 16),
+              style: const TextStyle(color: Colors.white, fontSize: 16),
             ),
           ),
         ],

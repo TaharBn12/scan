@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import '../../../product/domain/entities/product.dart';
 
 /// A snapshot of a product at the moment it was sold, so historical sales
 /// stay accurate even if the product is later edited, renamed or deleted.
@@ -7,7 +8,8 @@ class SaleItem extends Equatable {
   final String productName;
   final double unitPrice;
   final double unitCost; // 0 = unknown, used for profit reports
-  final int quantity;
+  final double quantity; // decimal for weight/volume units
+  final ProductUnit unit;
 
   const SaleItem({
     required this.productId,
@@ -15,6 +17,7 @@ class SaleItem extends Equatable {
     required this.unitPrice,
     this.unitCost = 0,
     required this.quantity,
+    this.unit = ProductUnit.piece,
   });
 
   double get lineTotal => unitPrice * quantity;
@@ -26,6 +29,7 @@ class SaleItem extends Equatable {
         'unitPrice': unitPrice,
         'unitCost': unitCost,
         'quantity': quantity,
+        'unit': unit.name,
       };
 
   factory SaleItem.fromMap(Map map) => SaleItem(
@@ -33,10 +37,11 @@ class SaleItem extends Equatable {
         productName: map['productName'] as String? ?? '',
         unitPrice: (map['unitPrice'] as num?)?.toDouble() ?? 0,
         unitCost: (map['unitCost'] as num?)?.toDouble() ?? 0,
-        quantity: (map['quantity'] as num?)?.toInt() ?? 0,
+        quantity: (map['quantity'] as num?)?.toDouble() ?? 0,
+        unit: ProductUnitX.fromName(map['unit'] as String?),
       );
 
   @override
   List<Object?> get props =>
-      [productId, productName, unitPrice, unitCost, quantity];
+      [productId, productName, unitPrice, unitCost, quantity, unit];
 }

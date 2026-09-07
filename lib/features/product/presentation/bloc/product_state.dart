@@ -5,6 +5,7 @@ enum ProductStatus { initial, loading, loaded, error, success }
 class ProductState extends Equatable {
   final ProductStatus status;
   final List<Product> products;
+  /// Either a localization key (e.g. 'product_added') or a raw error text.
   final String? message;
 
   const ProductState({
@@ -12,6 +13,39 @@ class ProductState extends Equatable {
     this.products = const [],
     this.message,
   });
+
+  List<Product> get lowStockProducts =>
+      products.where((p) => p.isLowStock).toList()
+        ..sort((a, b) => a.stock.compareTo(b.stock));
+
+  List<String> get categories => products
+      .map((p) => p.category.trim())
+      .where((c) => c.isNotEmpty)
+      .toSet()
+      .toList()
+    ..sort();
+
+  Product? byId(String id) {
+    for (final p in products) {
+      if (p.id == id) return p;
+    }
+    return null;
+  }
+
+  Product? byBarcode(String barcode) {
+    for (final p in products) {
+      if (p.hasBarcode && p.barcode == barcode) return p;
+    }
+    return null;
+  }
+
+  double get stockValueAtCost => products
+      .where((p) => p.trackStock)
+      .fold(0.0, (sum, p) => sum + p.stock * p.costPrice);
+
+  double get stockValueAtRetail => products
+      .where((p) => p.trackStock)
+      .fold(0.0, (sum, p) => sum + p.stock * p.price);
 
   ProductState copyWith({
     ProductStatus? status,
@@ -21,11 +55,7 @@ class ProductState extends Equatable {
     return ProductState(
       status: status ?? this.status,
       products: products ?? this.products,
-      message:
-          message, // Allow clearing message if not passed? No, usually distinct event.
-      // But for copyWith, let's say if message passed is null, we keep it?
-      // Or we want to set it to null?
-      // Let's assume transient message.
+      message: message, // transient: cleared unless explicitly passed
     );
   }
 

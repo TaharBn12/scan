@@ -1,138 +1,243 @@
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import '../data/hive_database.dart';
-import '../../features/product/data/models/product_model.dart';
-import '../../features/shop/data/models/shop_model.dart';
+import '../../features/product/domain/entities/product.dart';
+import '../../features/shop/domain/entities/shop.dart';
 
-/// Exports/imports everything stored locally (products, sales, customers,
-/// shop details) as a single JSON blob. There's no file-picker/path_provider
-/// dependency in this project, so backup goes through the clipboard: copy
-/// the JSON out, paste it back in (e.g. via a notes app, WhatsApp to
-/// yourself, etc.) to move data between devices or restore after a
-/// reinstall.
+/// Exports/imports everything stored locally as a single JSON document.
+///
+/// Backups can be written to a file (in the app's documents folder) and
+/// shared through any app (Drive, WhatsApp, e-mail...), or copied as text.
+/// Import accepts a file picked by the user or pasted text.
 class BackupHelper {
-  static const int backupVersion = 1;
+  static const int backupVersion = 2;
+  static const _lastBackupKey = 'last_backup_at';
+  static const _autoBackupKey = 'auto_backup_enabled';
+  static const _keepBackups = 7;
 
-  static String exportAsJson() {
-    final products = HiveDatabase.productBox.values
-        .map((p) => {
-              'id': p.id,
-              'name': p.name,
-              'barcode': p.barcode,
-              'price': p.price,
-              'stock': p.stock,
-              'hasBarcode': p.hasBarcode,
-              'costPrice': p.costPrice,
-              'category': p.category,
-              'lowStockThreshold': p.lowStockThreshold,
-            })
-        .toList();
+  static String exportAsJson({bool pretty = true}) {
+    final products =
+        HiveDatabase.productBox.values.map((p) => p.toMap()).toList();
 
-    final sales = HiveDatabase.salesBox.values
+    List<Map<String, dynamic>> dump(dynamic box) => (box.values as Iterable)
         .map((raw) => Map<String, dynamic>.from(raw as Map))
         .toList();
 
-    final customers = HiveDatabase.customersBox.values
-        .map((raw) => Map<String, dynamic>.from(raw as Map))
-        .toList();
+    final shop = HiveDatabase.shopBox.get('shop_details')?.toMap();
 
-    final shopModel = HiveDatabase.shopBox.get('shop_details');
-    final shop = shopModel != null
-        ? {
-            'name': shopModel.name,
-            'addressLine1': shopModel.addressLine1,
-            'addressLine2': shopModel.addressLine2,
-            'phoneNumber': shopModel.phoneNumber,
-            'upiId': shopModel.upiId,
-            'footerText': shopModel.footerText,
-          }
-        : null;
+    // Settings worth carrying to a new phone (never the PIN hashes).
+    final settingsBox = HiveDatabase.settingsBox;
+    const settingKeys = [
+      'app_locale',
+      'currency_symbol',
+      'currency_symbol_before',
+      'currency_decimals',
+      'decimal_quantities',
+      'sale_counter',
+      'sync_url',
+      'sync_enabled',
+      'full_sync_enabled',
+      'auto_sync_enabled',
+      'printer_mac',
+      'printer_name',
+      'paper_width',
+      'auto_print',
+      'theme_mode',
+    ];
+    final settings = <String, dynamic>{
+      for (final k in settingKeys)
+        if (settingsBox.containsKey(k)) k: settingsBox.get(k),
+    };
 
     final backup = {
       'version': backupVersion,
+      'app': 'billing_app',
       'exportedAt': DateTime.now().toIso8601String(),
       'products': products,
-      'sales': sales,
-      'customers': customers,
+      'sales': dump(HiveDatabase.salesBox),
+      'customers': dump(HiveDatabase.customersBox),
+      'expenses': dump(HiveDatabase.expensesBox),
+      'purchases': dump(HiveDatabase.purchasesBox),
+      'stockMovements': dump(HiveDatabase.stockMovementsBox),
+      'users': dump(HiveDatabase.usersBox),
       'shop': shop,
+      'settings': settings,
     };
 
-    return const JsonEncoder.withIndent('  ').convert(backup);
+    return pretty
+        ? const JsonEncoder.withIndent('  ').convert(backup)
+        : jsonEncode(backup);
+  }
+
+  // ------------------------------------------------------------- files
+
+  static Future<Directory> backupDirectory() async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/backups');
+    if (!await dir.exists()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  static String _fileName([DateTime? at]) {
+    final d = at ?? DateTime.now();
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'billing_backup_${d.year}-${two(d.month)}-${two(d.day)}_${two(d.hour)}${two(d.minute)}.json';
+  }
+
+  /// Writes a backup file to the app's documents folder and returns it.
+  static Future<File> exportToFile() async {
+    final dir = await backupDirectory();
+    final file = File('${dir.path}/${_fileName()}');
+    await file.writeAsString(exportAsJson(pretty: false), flush: true);
+    await HiveDatabase.settingsBox
+        .put(_lastBackupKey, DateTime.now().toIso8601String());
+    await _pruneOldBackups(dir);
+    return file;
+  }
+
+  /// Writes the backup file, then opens the system share sheet so the
+  /// merchant can send it to Drive / WhatsApp / e-mail.
+  static Future<File> exportAndShare({String? subject}) async {
+    final file = await exportToFile();
+    await SharePlus.instance.share(ShareParams(
+      files: [XFile(file.path, mimeType: 'application/json')],
+      subject: subject ?? 'Billing backup',
+      text: subject ?? 'Billing backup',
+    ));
+    return file;
+  }
+
+  static Future<List<File>> listBackups() async {
+    final dir = await backupDirectory();
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.json'))
+        .toList()
+      ..sort((a, b) => b.path.compareTo(a.path));
+    return files;
+  }
+
+  static Future<void> _pruneOldBackups(Directory dir) async {
+    final files = await listBackups();
+    for (final f in files.skip(_keepBackups)) {
+      try {
+        await f.delete();
+      } catch (_) {}
+    }
+  }
+
+  static DateTime? lastBackupAt() {
+    final raw = HiveDatabase.settingsBox.get(_lastBackupKey) as String?;
+    return raw == null ? null : DateTime.tryParse(raw);
+  }
+
+  static bool isAutoBackupEnabled() =>
+      HiveDatabase.settingsBox.get(_autoBackupKey) as bool? ?? true;
+
+  static Future<void> setAutoBackupEnabled(bool value) async {
+    await HiveDatabase.settingsBox.put(_autoBackupKey, value);
+  }
+
+  /// Called at app start: writes a backup at most once per day. Never
+  /// throws.
+  static Future<void> autoBackupIfDue() async {
+    try {
+      if (!isAutoBackupEnabled()) return;
+      final last = lastBackupAt();
+      if (last != null && DateTime.now().difference(last).inHours < 20) return;
+      if (HiveDatabase.salesBox.isEmpty && HiveDatabase.productBox.isEmpty) {
+        return;
+      }
+      await exportToFile();
+    } catch (_) {}
+  }
+
+  // ------------------------------------------------------------- import
+
+  static Future<BackupImportSummary> importFromFile(File file) async {
+    return importFromJson(await file.readAsString());
   }
 
   /// Merges a previously exported backup into local storage. Existing
   /// records with a matching id are overwritten; anything already on the
   /// device that isn't in the backup is left untouched (nothing is deleted).
-  /// Throws a [FormatException] (or similar) if [jsonString] isn't a backup
-  /// produced by [exportAsJson] - the caller is expected to show that error.
+  /// Throws a [FormatException] if [jsonString] isn't a backup produced by
+  /// [exportAsJson].
   static Future<BackupImportSummary> importFromJson(String jsonString) async {
-    final decoded = jsonDecode(jsonString);
-    if (decoded is! Map) {
+    final decoded = jsonDecode(jsonString.trim());
+    if (decoded is! Map || decoded['products'] is! List) {
       throw const FormatException('This does not look like a backup file.');
     }
 
     int productsImported = 0;
     int salesImported = 0;
     int customersImported = 0;
+    int expensesImported = 0;
     bool shopImported = false;
 
-    final products = decoded['products'];
-    if (products is List) {
-      for (final raw in products) {
-        final map = Map<String, dynamic>.from(raw as Map);
-        final model = ProductModel(
-          id: map['id'] as String,
-          name: map['name'] as String? ?? '',
-          barcode: map['barcode'] as String? ?? '',
-          price: (map['price'] as num?)?.toDouble() ?? 0,
-          stock: (map['stock'] as num?)?.toInt() ?? 0,
-          hasBarcode: map['hasBarcode'] as bool? ?? true,
-          costPrice: (map['costPrice'] as num?)?.toDouble() ?? 0,
-          category: map['category'] as String? ?? '',
-          lowStockThreshold: (map['lowStockThreshold'] as num?)?.toInt() ?? 5,
-        );
-        await HiveDatabase.productBox.put(model.id, model);
-        productsImported++;
-      }
+    for (final raw in decoded['products'] as List) {
+      final map = Map<String, dynamic>.from(raw as Map);
+      if ((map['id'] as String?)?.isEmpty ?? true) continue;
+      final product = Product.fromMap(map);
+      await HiveDatabase.productBox.put(product.id, product);
+      productsImported++;
     }
 
-    final sales = decoded['sales'];
-    if (sales is List) {
-      for (final raw in sales) {
+    Future<int> restore(dynamic list, dynamic box) async {
+      if (list is! List) return 0;
+      int n = 0;
+      for (final raw in list) {
         final map = Map<String, dynamic>.from(raw as Map);
-        final id = map['id'] as String;
-        await HiveDatabase.salesBox.put(id, map);
-        salesImported++;
+        final id = map['id'] as String?;
+        if (id == null || id.isEmpty) continue;
+        await box.put(id, map);
+        n++;
       }
+      return n;
     }
 
-    final customers = decoded['customers'];
-    if (customers is List) {
-      for (final raw in customers) {
-        final map = Map<String, dynamic>.from(raw as Map);
-        final id = map['id'] as String;
-        await HiveDatabase.customersBox.put(id, map);
-        customersImported++;
-      }
-    }
+    salesImported = await restore(decoded['sales'], HiveDatabase.salesBox);
+    customersImported =
+        await restore(decoded['customers'], HiveDatabase.customersBox);
+    expensesImported =
+        await restore(decoded['expenses'], HiveDatabase.expensesBox);
+    await restore(decoded['purchases'], HiveDatabase.purchasesBox);
+    await restore(decoded['stockMovements'], HiveDatabase.stockMovementsBox);
+    await restore(decoded['users'], HiveDatabase.usersBox);
 
     final shop = decoded['shop'];
     if (shop is Map) {
-      final model = ShopModel(
-        name: shop['name'] as String? ?? '',
-        addressLine1: shop['addressLine1'] as String? ?? '',
-        addressLine2: shop['addressLine2'] as String? ?? '',
-        phoneNumber: shop['phoneNumber'] as String? ?? '',
-        upiId: shop['upiId'] as String? ?? '',
-        footerText: shop['footerText'] as String? ?? '',
-      );
-      await HiveDatabase.shopBox.put('shop_details', model);
+      await HiveDatabase.shopBox.put('shop_details', Shop.fromMap(shop));
       shopImported = true;
     }
+
+    final settings = decoded['settings'];
+    if (settings is Map) {
+      for (final entry in settings.entries) {
+        if (entry.key is String && entry.value != null) {
+          await HiveDatabase.settingsBox.put(entry.key, entry.value);
+        }
+      }
+    }
+
+    // Keep invoice numbering monotonic after a restore.
+    int maxNumber = HiveDatabase.settingsBox.get('sale_counter') as int? ?? 0;
+    for (final raw in HiveDatabase.salesBox.values) {
+      final n = ((raw as Map)['number'] as num?)?.toInt() ?? 0;
+      if (n > maxNumber) maxNumber = n;
+    }
+    await HiveDatabase.settingsBox.put('sale_counter', maxNumber);
 
     return BackupImportSummary(
       productsImported: productsImported,
       salesImported: salesImported,
       customersImported: customersImported,
+      expensesImported: expensesImported,
       shopImported: shopImported,
     );
   }
@@ -142,12 +247,14 @@ class BackupImportSummary {
   final int productsImported;
   final int salesImported;
   final int customersImported;
+  final int expensesImported;
   final bool shopImported;
 
   const BackupImportSummary({
     required this.productsImported,
     required this.salesImported,
     required this.customersImported,
+    this.expensesImported = 0,
     required this.shopImported,
   });
 }

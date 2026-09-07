@@ -18,18 +18,25 @@ import '../../features/customers/data/repositories/customer_repository_impl.dart
 import '../../features/customers/domain/repositories/customer_repository.dart';
 import '../../features/customers/domain/usecases/customer_usecases.dart';
 import '../../features/customers/presentation/bloc/customer_bloc.dart';
+import '../../features/expenses/data/repositories/expense_repository_impl.dart';
+import '../../features/expenses/domain/repositories/expense_repository.dart';
+import '../../features/expenses/presentation/bloc/expense_bloc.dart';
+import '../../features/inventory/data/repositories/inventory_repository_impl.dart';
+import '../../features/inventory/domain/repositories/inventory_repository.dart';
+import '../../features/inventory/presentation/bloc/inventory_bloc.dart';
+import '../../features/users/data/repositories/user_repository.dart';
 
 final sl = GetIt.instance;
 
 Future<void> init() async {
   // Features - Product
-  // Bloc
   sl.registerFactory(
     () => ProductBloc(
       getProductsUseCase: sl(),
       addProductUseCase: sl(),
       updateProductUseCase: sl(),
       deleteProductUseCase: sl(),
+      adjustStockUseCase: sl(),
     ),
   );
 
@@ -52,6 +59,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => UpdateProductUseCase(sl()));
   sl.registerLazySingleton(() => DeleteProductUseCase(sl()));
   sl.registerLazySingleton(() => GetProductByBarcodeUseCase(sl()));
+  sl.registerLazySingleton(() => AdjustStockUseCase(sl()));
 
   // Repository
   sl.registerLazySingleton<ProductRepository>(
@@ -59,11 +67,8 @@ Future<void> init() async {
   );
 
   // Features - Shop
-  // Use cases
   sl.registerLazySingleton(() => GetShopUseCase(sl()));
   sl.registerLazySingleton(() => UpdateShopUseCase(sl()));
-
-  // Repository
   sl.registerLazySingleton<ShopRepository>(
     () => ShopRepositoryImpl(),
   );
@@ -104,4 +109,16 @@ Future<void> init() async {
   sl.registerLazySingleton<CustomerRepository>(
     () => CustomerRepositoryImpl(),
   );
+
+  // Features - Expenses
+  sl.registerFactory(() => ExpenseBloc(repository: sl()));
+  sl.registerLazySingleton<ExpenseRepository>(() => ExpenseRepositoryImpl());
+
+  // Features - Inventory (purchases / stock movements)
+  sl.registerFactory(() => InventoryBloc(repository: sl()));
+  sl.registerLazySingleton<InventoryRepository>(
+      () => InventoryRepositoryImpl());
+
+  // Features - Users
+  sl.registerLazySingleton(() => UserRepository());
 }

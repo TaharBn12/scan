@@ -14,12 +14,12 @@ class GetSalesUseCase implements UseCase<List<Sale>, NoParams> {
   }
 }
 
-class AddSaleUseCase implements UseCase<void, Sale> {
+class AddSaleUseCase implements UseCase<Sale, Sale> {
   final SaleRepository repository;
   AddSaleUseCase(this.repository);
 
   @override
-  Future<Either<Failure, void>> call(Sale params) {
+  Future<Either<Failure, Sale>> call(Sale params) {
     return repository.addSale(params);
   }
 }

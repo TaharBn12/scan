@@ -5,8 +5,14 @@ import 'package:vibration/vibration.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../billing/presentation/bloc/billing_bloc.dart';
+import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/widgets/quantity_dialog.dart';
+import '../../../product/domain/entities/product.dart';
+import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/cart_item.dart';
 
 class HomePage extends StatefulWidget {
@@ -24,6 +30,7 @@ class _HomePageState extends State<HomePage> {
 
   bool _isCameraOn = true;
   bool _isFlashOn = false;
+  bool _dialogOpen = false;
 
   // Cooldown mapping to prevent rapid firing of the same barcode
   final Map<String, DateTime> _lastScanTimes = {};
@@ -35,6 +42,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _onDetect(BarcodeCapture capture) async {
+    if (_dialogOpen) return;
     final List<Barcode> barcodes = capture.barcodes;
     final now = DateTime.now();
 
@@ -52,40 +60,154 @@ class _HomePageState extends State<HomePage> {
 
         _lastScanTimes[rawValue] = now;
 
-        // Vibrate
         final hasVibrator = await Vibration.hasVibrator();
         if (hasVibrator == true) {
-          Vibration.vibrate();
+          Vibration.vibrate(duration: 80);
         }
 
         if (mounted) {
-          context.read<BillingBloc>().add(ScanBarcodeEvent(rawValue));
+          _handleBarcode(rawValue);
         }
         break; // Process one barcode at a time per frame
       }
     }
   }
 
+  /// Weighed products (kg, L…) prompt for the quantity instead of adding 1.
+  Future<void> _handleBarcode(String barcode) async {
+    final products = context.read<ProductBloc>().state;
+    final product = products.byBarcode(barcode);
+    if (product != null && product.unit.allowsDecimals) {
+      _dialogOpen = true;
+      final result = await showQuantityDialog(context, product: product);
+      _dialogOpen = false;
+      if (!mounted) return;
+      if (result != null) {
+        context.read<BillingBloc>().add(AddProductToCartEvent(product,
+            quantity: result.quantity, unitPrice: result.unitPrice));
+      }
+      return;
+    }
+    context.read<BillingBloc>().add(ScanBarcodeEvent(barcode));
+  }
+
+  Future<void> _typeBarcode() async {
+    final l10n = context.l10n;
+    final controller = TextEditingController();
+    _dialogOpen = true;
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.t('manual_entry')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(hintText: l10n.t('barcode')),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: Text(l10n.ok)),
+        ],
+      ),
+    );
+    _dialogOpen = false;
+    if (code != null && code.trim().isNotEmpty && mounted) {
+      _handleBarcode(code.trim());
+    }
+  }
+
+  Future<void> _offerToCreate(String barcode) async {
+    final l10n = context.l10n;
+    if (!sessionController.isAdmin) return;
+    _dialogOpen = true;
+    final create = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.t('unknown_barcode_title')),
+        content: Text(l10n.t('unknown_barcode_body', {'barcode': barcode})),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel)),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l10n.t('add_product_now'))),
+        ],
+      ),
+    );
+    _dialogOpen = false;
+    if (create == true && mounted) {
+      _scannerController.stop();
+      final created = await context.push<Product>(
+          '/products/add?barcode=${Uri.encodeComponent(barcode)}');
+      if (!mounted) return;
+      if (_isCameraOn) _scannerController.start();
+      if (created != null) {
+        context.read<BillingBloc>().add(AddProductToCartEvent(created));
+      }
+    }
+  }
+
+  Future<void> _confirmClear() async {
+    final l10n = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.t('clear_cart')),
+        content: Text(l10n.t('clear_cart_confirm')),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.cancel)),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(l10n.t('remove'),
+                  style: const TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok == true && mounted) {
+      context.read<BillingBloc>().add(ClearCartEvent());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Scaffold(
       body: BlocListener<BillingBloc, BillingState>(
         listenWhen: (previous, current) =>
             previous.error != current.error && current.error != null,
         listener: (context, state) {
-          if (state.error != null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.error!),
-                backgroundColor: Colors.red,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+          final err = state.error!;
+          if (err == 'product_not_found' && state.errorBarcode != null) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(l10n
+                  .t('product_not_found', {'barcode': state.errorBarcode})),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 2),
+            ));
+            _offerToCreate(state.errorBarcode!);
+            return;
           }
+          final text = err.startsWith('print_failed:')
+              ? l10n.t('print_failed',
+                  {'error': err.substring('print_failed:'.length)})
+              : l10n.t(err);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(text),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ));
         },
         child: Stack(
           children: [
-            // SCANNER VIEW (TOP 50%)
             Positioned(
               top: 0,
               left: 0,
@@ -93,8 +215,6 @@ class _HomePageState extends State<HomePage> {
               height: MediaQuery.of(context).size.height * 0.4,
               child: _buildScannerSection(),
             ),
-
-            // BOTTOM PANEL (BOTTOM 50% + OVERLAP)
             Positioned(
               top: (MediaQuery.of(context).size.height * 0.4) - 24, // overlap
               left: 0,
@@ -116,13 +236,16 @@ class _HomePageState extends State<HomePage> {
                   if (_isCameraOn && mounted) _scannerController.start();
                 },
           icon: Icons.payment,
-          label: 'Review Order',
+          label: state.cartItems.isEmpty
+              ? l10n.t('review_order')
+              : '${l10n.t('review_order')} · ${Money.format(state.totalAmount)}',
         );
       }),
     );
   }
 
   Widget _buildScannerSection() {
+    final l10n = context.l10n;
     return Container(
       color: Colors.black,
       child: Stack(
@@ -134,10 +257,10 @@ class _HomePageState extends State<HomePage> {
           ),
           if (!_isCameraOn) _buildCameraOffState(),
 
-          // Overlay Actions (Top Right)
-          Positioned(
+          // Overlay Actions (top, trailing side)
+          PositionedDirectional(
             top: MediaQuery.of(context).padding.top + 16,
-            right: 16,
+            end: 16,
             child: Column(
               children: [
                 _buildOverlayButton(
@@ -161,11 +284,8 @@ class _HomePageState extends State<HomePage> {
                 if (_isCameraOn) const SizedBox(height: 16),
                 _buildOverlayButton(
                   icon: _isCameraOn ? Icons.videocam : Icons.videocam_off,
-                  // color:  Colors.white24 ,
                   onPressed: () {
-                    setState(() {
-                      _isCameraOn = !_isCameraOn;
-                    });
+                    setState(() => _isCameraOn = !_isCameraOn);
                     if (_isCameraOn) {
                       _scannerController.start();
                     } else {
@@ -177,7 +297,31 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // Central Overlay Bounding Box
+          // Quick actions (top, leading side)
+          PositionedDirectional(
+            top: MediaQuery.of(context).padding.top + 16,
+            start: 16,
+            child: Column(
+              children: [
+                _buildOverlayButton(
+                  icon: Icons.keyboard_alt_outlined,
+                  tooltip: l10n.t('manual_entry'),
+                  onPressed: _typeBarcode,
+                ),
+                const SizedBox(height: 16),
+                _buildOverlayButton(
+                  icon: Icons.inventory_2_outlined,
+                  tooltip: l10n.noBarcodeItems.replaceAll('\n', ' '),
+                  onPressed: () async {
+                    _scannerController.stop();
+                    await context.push('/no-barcode');
+                    if (_isCameraOn && mounted) _scannerController.start();
+                  },
+                ),
+              ],
+            ),
+          ),
+
           if (_isCameraOn)
             Center(
               child: Container(
@@ -189,7 +333,6 @@ class _HomePageState extends State<HomePage> {
                 ),
                 child: Stack(
                   children: [
-                    // Corners
                     _buildCorner(Alignment.topLeft),
                     _buildCorner(Alignment.topRight),
                     _buildCorner(Alignment.bottomLeft),
@@ -204,6 +347,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildCameraOffState() {
+    final l10n = context.l10n;
     return Container(
       color: const Color(0xFF1E293B), // slate-800
       child: Column(
@@ -221,18 +365,18 @@ class _HomePageState extends State<HomePage> {
                 const Icon(Icons.videocam_off, color: Colors.white, size: 32),
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Camera is turned off',
-            style: TextStyle(
+          Text(
+            l10n.t('camera_off'),
+            style: const TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 32),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
             child: Text(
-              'Turn on your camera to start scanning barcodes and items automatically.',
+              l10n.t('camera_off_hint'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
           const SizedBox(height: 24),
@@ -245,8 +389,8 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             icon: const Icon(Icons.videocam),
-            label: const Text('Turn on Camera',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            label: Text(l10n.t('turn_on_camera'),
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             onPressed: () {
               setState(() => _isCameraOn = true);
               _scannerController.start();
@@ -258,7 +402,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildOverlayButton(
-      {required IconData icon, required VoidCallback onPressed, Color? color}) {
+      {required IconData icon,
+      required VoidCallback onPressed,
+      Color? color,
+      String? tooltip}) {
     return Container(
       width: 44,
       height: 44,
@@ -270,6 +417,7 @@ class _HomePageState extends State<HomePage> {
       ),
       child: IconButton(
         icon: Icon(icon, color: Colors.white),
+        tooltip: tooltip,
         onPressed: onPressed,
       ),
     );
@@ -306,6 +454,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildBottomPanel() {
+    final l10n = context.l10n;
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,
@@ -317,7 +466,6 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Column(
         children: [
-          // Drag handle indicator
           Container(
             width: 48,
             height: 4,
@@ -327,40 +475,53 @@ class _HomePageState extends State<HomePage> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-
-          // Header
           BlocBuilder<BillingBloc, BillingState>(
             builder: (context, state) {
-              final totalItems =
-                  state.cartItems.fold<int>(0, (sum, i) => sum + i.quantity);
               return Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Scanned Items',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.w600)),
-                        Text('$totalItems items total',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey)),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(l10n.t('scanned_items'),
+                                  style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600)),
+                              if (state.cartItems.isNotEmpty)
+                                IconButton(
+                                  tooltip: l10n.t('clear_cart'),
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(Icons.delete_sweep_outlined,
+                                      size: 20, color: Colors.grey),
+                                  onPressed: _confirmClear,
+                                ),
+                            ],
+                          ),
+                          Text(
+                              l10n.t('items_total',
+                                  {'count': formatQty(state.totalQuantity)}),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey)),
+                        ],
+                      ),
                     ),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('TOTAL PRICE',
-                            style: TextStyle(
+                        Text(l10n.t('total_price'),
+                            style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey,
                                 letterSpacing: 1.2)),
                         Text(
-                          'DA${state.totalAmount.toStringAsFixed(2)}',
+                          Money.format(state.totalAmount),
                           style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
@@ -374,30 +535,26 @@ class _HomePageState extends State<HomePage> {
             },
           ),
           const Divider(height: 1),
-
-          // List View
           Expanded(
-            child: Stack(children: [
-              BlocBuilder<BillingBloc, BillingState>(
-                builder: (context, state) {
-                  if (state.cartItems.isEmpty) {
-                    return _buildEmptyCart();
-                  }
+            child: BlocBuilder<BillingBloc, BillingState>(
+              builder: (context, state) {
+                if (state.cartItems.isEmpty) {
+                  return _buildEmptyCart();
+                }
 
-                  return ListView.separated(
-                    padding: const EdgeInsets.only(
-                        left: 15, right: 15, top: 16, bottom: 100),
-                    itemCount: state.cartItems.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final item = state.cartItems[index];
-                      return _buildCartItemCard(context, item);
-                    },
-                  );
-                },
-              ),
-            ]),
+                return ListView.separated(
+                  padding: const EdgeInsets.only(
+                      left: 15, right: 15, top: 16, bottom: 100),
+                  itemCount: state.cartItems.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = state.cartItems[index];
+                    return _buildCartItemCard(context, item);
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -405,6 +562,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildEmptyCart() {
+    final l10n = context.l10n;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -421,15 +579,16 @@ class _HomePageState extends State<HomePage> {
                 Icon(Icons.shopping_basket, size: 40, color: Colors.grey[300]),
           ),
           const SizedBox(height: 16),
-          const Text('List is empty',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          Text(l10n.t('list_empty'),
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 40),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
             child: Text(
-              'Scanned items will appear here as you scan them with the camera above.',
+              l10n.t('list_empty_hint'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey, fontSize: 14),
+              style: const TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ),
         ],
@@ -437,85 +596,131 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildCartItemCard(
-    BuildContext context,
-    CartItem item,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
-        ],
+  Widget _buildCartItemCard(BuildContext context, CartItem item) {
+    final l10n = context.l10n;
+    final unit = l10n.t(item.product.unit.shortKey);
+    final decimals = item.product.unit.allowsDecimals;
+    final stockWarning = item.product.trackStock &&
+        item.quantity > item.product.stock;
+
+    return Dismissible(
+      key: ValueKey(item.product.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: AlignmentDirectional.centerEnd,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Icon(Icons.delete, color: Colors.white),
       ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        spacing: 1,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.product.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 14),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+      onDismissed: (_) => context
+          .read<BillingBloc>()
+          .add(RemoveProductFromCartEvent(item.product.id)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: stockWarning ? Colors.orange : Colors.grey[200]!),
+          boxShadow: const [
+            BoxShadow(
+                color: Colors.black12, blurRadius: 4, offset: Offset(0, 2))
+          ],
+        ),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: () async {
+                  final result = await showQuantityDialog(context,
+                      product: item.product,
+                      initialQuantity: item.quantity,
+                      initialPrice: item.unitPrice,
+                      askPrice: true);
+                  if (result == null || !context.mounted) return;
+                  final bloc = context.read<BillingBloc>();
+                  bloc.add(UpdateQuantityEvent(item.product.id, result.quantity));
+                  bloc.add(UpdateLinePriceEvent(item.product.id, result.unitPrice));
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.product.name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${formatQty(item.quantity)} $unit × ${Money.format(item.unitPrice)} = ${Money.format(item.total)}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: item.priceOverridden
+                              ? AppTheme.primaryColor
+                              : Colors.grey[600]),
+                    ),
+                    if (stockWarning)
+                      Text(
+                        l10n.t('insufficient_stock', {
+                          'count': '${formatQty(item.product.stock)} $unit',
+                          'name': item.product.name
+                        }),
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.orange),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'DA${item.product.price.toStringAsFixed(2)}',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: Colors.grey[600]),
-                ),
-              ],
+              ),
             ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-            ),
-            padding: const EdgeInsets.all(4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _circularIconButton(
-                    icon: Icons.remove,
-                    onPressed: () {
-                      if (item.quantity > 1) {
-                        context.read<BillingBloc>().add(UpdateQuantityEvent(
-                            item.product.id, item.quantity - 1));
-                      } else {
-                        context
-                            .read<BillingBloc>()
-                            .add(RemoveProductFromCartEvent(item.product.id));
-                      }
-                    }),
-                SizedBox(
-                  width: 32,
-                  child: Text(
-                    '${item.quantity}',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _circularIconButton(
+                      icon: Icons.remove,
+                      onPressed: () {
+                        final step = decimals ? 0.5 : 1.0;
+                        final next = item.quantity - step;
+                        if (next > 0) {
+                          context.read<BillingBloc>().add(
+                              UpdateQuantityEvent(item.product.id, next));
+                        } else {
+                          context.read<BillingBloc>().add(
+                              RemoveProductFromCartEvent(item.product.id));
+                        }
+                      }),
+                  SizedBox(
+                    width: 40,
+                    child: Text(
+                      formatQty(item.quantity),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
-                ),
-                _circularIconButton(
-                    icon: Icons.add,
-                    onPressed: () {
-                      context.read<BillingBloc>().add(UpdateQuantityEvent(
-                          item.product.id, item.quantity + 1));
-                    }),
-              ],
+                  _circularIconButton(
+                      icon: Icons.add,
+                      onPressed: () {
+                        final step = decimals ? 0.5 : 1.0;
+                        context.read<BillingBloc>().add(UpdateQuantityEvent(
+                            item.product.id, item.quantity + step));
+                      }),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -531,7 +736,4 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   }
-
-  // A floating Details/Checkout Button at the very bottom
-  // Added a Stack wrapper below to overlay this button
 }
