@@ -9,7 +9,7 @@ class CartItem extends Equatable {
   /// can be overridden per sale for negotiated prices).
   final double unitPrice;
 
-  const CartItem({
+  CartItem({
     required this.product,
     this.quantity = 1,
     double? unitPrice,

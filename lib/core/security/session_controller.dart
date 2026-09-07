@@ -52,6 +52,10 @@ class SessionController extends ChangeNotifier {
 
   bool get isAdmin => !isMultiUser || (_currentUser?.isAdmin ?? false);
 
+  /// Whether a "lock" action makes sense right now (some PIN is configured).
+  bool get canLock =>
+      isMultiUser || (appSettings.value.pinEnabled && PinHelper.hasAppPin);
+
   String? get cashierId => isMultiUser ? _currentUser?.id : null;
   String? get cashierName => isMultiUser ? _currentUser?.name : null;
 

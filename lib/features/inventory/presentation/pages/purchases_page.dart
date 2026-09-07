@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/utils/money.dart';
+import '../../../product/domain/entities/product.dart';
 import '../../domain/entities/purchase.dart';
 import '../bloc/inventory_bloc.dart';
 

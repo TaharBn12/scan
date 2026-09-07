@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../utils/money.dart';
+import '../../features/billing/domain/entities/payment_method.dart';
 import '../../features/product/domain/entities/product.dart';
 import '../../features/sales/domain/entities/sale.dart';
 import '../../features/shop/domain/entities/shop.dart';

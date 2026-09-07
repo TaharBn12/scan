@@ -7,6 +7,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../l10n/app_localizations.dart';
+import '../../features/billing/domain/entities/payment_method.dart';
 import '../../features/expenses/domain/entities/expense.dart';
 import '../../features/product/domain/entities/product.dart';
 import '../../features/sales/domain/entities/sale.dart';

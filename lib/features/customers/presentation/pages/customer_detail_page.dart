@@ -12,6 +12,7 @@ import '../../../../core/pdf/pdf_helper.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../billing/domain/entities/payment_method.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
 import '../../../sales/domain/entities/sale.dart';
 import '../../../sales/presentation/pages/invoice_page.dart';

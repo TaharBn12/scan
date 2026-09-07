@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../product/domain/entities/product.dart';
 import '../../../sales/domain/entities/sale.dart';
 import '../../../sales/domain/entities/sale_item.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';

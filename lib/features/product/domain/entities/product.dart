@@ -6,10 +6,10 @@ enum ProductUnit { piece, kg, g, l, ml, m, box, pack }
 
 extension ProductUnitX on ProductUnit {
   /// Localization key for the long label (e.g. 'unit_kg').
-  String get labelKey => 'unit_${name}';
+  String get labelKey => 'unit_$name';
 
   /// Localization key for the short label shown next to quantities.
-  String get shortKey => 'unit_short_${name}';
+  String get shortKey => 'unit_short_$name';
 
   bool get allowsDecimals =>
       this == ProductUnit.kg ||
