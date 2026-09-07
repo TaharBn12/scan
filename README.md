@@ -9,6 +9,35 @@ https://github.com/user-attachments/assets/f2d16454-5408-43b3-b207-cd843bbc2c9e
 
 
 
+## ✨ What's new in 2.0
+
+- **Arabic / French / English UI** with full RTL layout (language switch in Settings, follows the phone by default, Arabic fallback). Currency symbol, decimals and symbol position are configurable (default `DA`).
+- **Share invoices as PDF** (WhatsApp, e‑mail…) with Arabic-capable fonts, in addition to Bluetooth thermal printing. Thermal receipts stay Latin-only because of printer font limits.
+- **Backup to a file** (JSON) with share sheet, restore from file / pasted text, automatic daily local backups (last 7 kept).
+- **Low-stock screen** with per-product threshold and a badge on the menu.
+- **Purchases / stock-in** entries with supplier, cost update and a full stock movement log per product.
+- **Partial debt payments** – credit sales keep a payment history, customers have credit limits and statements.
+- **Reports** with period filter (day / week / month / custom range), daily & monthly bar charts, payment & cashier breakdown, top products, inventory value, Z-report printing and CSV / PDF export.
+- **Units** (piece, kg, g, L, mL, m, box, pack) with decimal quantities for weighed goods.
+- **Two-way website sync** – outbox of changed products / sales / customers / expenses / purchases pushed to your site, product changes pulled back (contract below).
+- **App lock with PIN** (auto-lock after 2 min in background) and **multi-user mode** (admin / cashier, each with their own PIN; cashier name stored on every sale).
+- **Daily expenses** with categories → real net profit in reports.
+- **Barcode labels** – A4 PDF sticker sheets or thermal label printing for products without a barcode (auto-generated internal codes).
+
+### Website sync contract
+
+All requests carry `Authorization: Bearer <token>` (token shown in Settings → Website Sync).
+
+```
+POST <base>/api/sync/push
+  { "token": "...", "changes": [ { "entity": "product|sale|customer|expense|purchase|stock_movement",
+                                   "op": "upsert|delete", "id": "...", "data": { ... } } ] }
+  -> 200 { "ok": true }
+
+GET <base>/api/sync/products?since=<ISO-8601>
+  -> 200 { "products": [ { ...product map... } ], "deleted": [ "id", ... ] }
+```
+
 ## 🎯 Project Scope
 
 This application serves as a complete offline POS system for small to medium-sized retail shops. It streamlines the checkout process, catalog management, and receipt generation securely entirely on-device.
