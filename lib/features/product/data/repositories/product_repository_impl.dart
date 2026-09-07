@@ -30,7 +30,7 @@ class ProductRepositoryImpl implements ProductRepository {
         }
       }
       if (product == null) {
-        return const Left(CacheFailure('Product not found'));
+        return const Left(CacheFailure('product_not_found'));
       }
       return Right(product);
     } catch (e) {

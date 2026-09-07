@@ -760,7 +760,7 @@ class _SettingsPageState extends State<SettingsPage> {
         if (state.errorMessage != null &&
             (state.status == PrinterStatus.scanFailure ||
                 state.status == PrinterStatus.connectionFailure)) {
-          _snack(state.errorMessage!, color: Colors.red);
+          _snack(l10n.t(state.errorMessage!), color: Colors.red);
         } else if (state.status == PrinterStatus.connected) {
           _snack(l10n.t('connected_to_printer'), color: Colors.green);
         }

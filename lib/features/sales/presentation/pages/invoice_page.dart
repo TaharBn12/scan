@@ -208,7 +208,7 @@ class _InvoicePageState extends State<InvoicePage> {
         paidAmount: _sale.isCredit ? _sale.amountPaid : null,
         dueAmount: _sale.isCredit ? _sale.amountDue : null,
         cashierName: _sale.cashierName,
-        footer: shop.footerText,
+        footer: shop.footerText.isNotEmpty ? shop.footerText : 'Thank you!',
       );
       _snack(l10n.t('printed_successfully'), color: Colors.green);
     } catch (e) {

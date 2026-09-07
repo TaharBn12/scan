@@ -8,10 +8,9 @@ class ShopRepositoryImpl implements ShopRepository {
   static const String shopKey = 'shop_details';
 
   /// Used before the merchant fills in their details.
-  static const Shop defaultShop = Shop(
-    name: 'My Shop',
-    footerText: 'Thank you for your purchase!',
-  );
+  /// Empty name/footer so the UI falls back to localized defaults
+  /// (app title / "thank you") instead of English text.
+  static const Shop defaultShop = Shop();
 
   @override
   Future<Either<Failure, Shop>> getShop() async {
