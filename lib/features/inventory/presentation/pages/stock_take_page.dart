@@ -56,8 +56,13 @@ class _StockTakePageState extends State<StockTakePage> {
 
   // ------------------------------------------------------------ counting
 
-  void _onDetect(BarcodeCapture capture) async {
+  Future<void> _onDetect(BarcodeCapture capture) async {
+    if (!mounted) return;
+    // Capture everything that needs a BuildContext before the first await.
+    final products = context.read<ProductBloc>().state;
+    final unknownMessage = context.l10n;
     final now = DateTime.now();
+
     for (final barcode in capture.barcodes) {
       final raw = barcode.rawValue;
       if (raw == null || raw.isEmpty) continue;
@@ -65,16 +70,16 @@ class _StockTakePageState extends State<StockTakePage> {
       if (last != null && now.difference(last).inMilliseconds < 1200) continue;
       _lastScan[raw] = now;
 
-      final product = context.read<ProductBloc>().state.byBarcode(raw);
+      final product = products.byBarcode(raw);
       if (product == null) {
-        if (mounted) {
-          showAppSnack(context, context.l10n.t('product_not_found', {'barcode': raw}),
-              icon: Icons.error_outline);
-        }
+        showAppSnack(
+            context, unknownMessage.t('product_not_found', {'barcode': raw}),
+            icon: Icons.error_outline);
         return;
       }
       final hasVibrator = await Vibration.hasVibrator();
       if (hasVibrator == true) Vibration.vibrate(duration: 45);
+      if (!mounted) return;
       _add(product, 1);
       return;
     }
