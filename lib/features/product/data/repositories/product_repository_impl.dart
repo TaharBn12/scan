@@ -1,7 +1,6 @@
 import 'package:fpdart/fpdart.dart';
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 
@@ -51,7 +50,6 @@ class ProductRepositoryImpl implements ProductRepository {
           ? product.copyWith(updatedAt: DateTime.now())
           : product;
       await HiveDatabase.productBox.put(stamped.id, stamped);
-      await SyncQueue.enqueue('product', stamped.id, SyncQueue.opUpsert);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -62,7 +60,6 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<Either<Failure, void>> deleteProduct(String id) async {
     try {
       await HiveDatabase.productBox.delete(id);
-      await SyncQueue.enqueue('product', id, SyncQueue.opDelete);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -82,7 +79,6 @@ class ProductRepositoryImpl implements ProductRepository {
       final updated =
           existing.copyWith(stock: newStock, updatedAt: DateTime.now());
       await box.put(updated.id, updated);
-      await SyncQueue.enqueue('product', updated.id, SyncQueue.opUpsert);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

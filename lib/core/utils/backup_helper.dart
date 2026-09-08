@@ -38,15 +38,14 @@ class BackupHelper {
       'currency_decimals',
       'decimal_quantities',
       'sale_counter',
-      'sync_url',
-      'sync_enabled',
-      'full_sync_enabled',
-      'auto_sync_enabled',
       'printer_mac',
       'printer_name',
       'paper_width',
       'auto_print',
       'theme_mode',
+      'theme_accent',
+      'compact_mode',
+      'quick_sale_favorites',
     ];
     final settings = <String, dynamic>{
       for (final k in settingKeys)

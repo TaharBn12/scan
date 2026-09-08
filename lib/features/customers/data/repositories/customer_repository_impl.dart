@@ -1,7 +1,6 @@
 import 'package:fpdart/fpdart.dart';
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/customer.dart';
 import '../../domain/repositories/customer_repository.dart';
 
@@ -31,7 +30,6 @@ class CustomerRepositoryImpl implements CustomerRepository {
     try {
       final stamped = customer.copyWith(updatedAt: DateTime.now());
       await HiveDatabase.customersBox.put(stamped.id, stamped.toMap());
-      await SyncQueue.enqueue('customer', stamped.id, SyncQueue.opUpsert);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -42,7 +40,6 @@ class CustomerRepositoryImpl implements CustomerRepository {
   Future<Either<Failure, void>> deleteCustomer(String id) async {
     try {
       await HiveDatabase.customersBox.delete(id);
-      await SyncQueue.enqueue('customer', id, SyncQueue.opDelete);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

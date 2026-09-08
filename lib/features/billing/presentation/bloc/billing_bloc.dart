@@ -6,7 +6,6 @@ import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/product/domain/usecases/product_usecases.dart';
 import 'package:billing_app/features/customers/domain/entities/customer.dart';
 import '../../../../core/utils/printer_helper.dart';
-import '../../../../core/utils/sync_helper.dart';
 import '../../../../core/data/hive_database.dart';
 
 part 'billing_event.dart';
@@ -53,16 +52,8 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
       (failure) {
         emit(state.copyWith(
             error: 'product_not_found', errorBarcode: event.barcode));
-        SyncHelper.sendScan(barcode: event.barcode);
       },
-      (product) {
-        add(AddProductToCartEvent(product));
-        SyncHelper.sendScan(
-          barcode: event.barcode,
-          productName: product.name,
-          price: product.price,
-        );
-      },
+      (product) => add(AddProductToCartEvent(product)),
     );
   }
 

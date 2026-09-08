@@ -8,20 +8,17 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' show DateFormat;
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/pin_helper.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/settings/app_settings_controller.dart';
-import '../../../../core/sync/cloud_sync_helper.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/backup_helper.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/printer_helper.dart';
-import '../../../../core/utils/sync_helper.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../../expenses/presentation/bloc/expense_bloc.dart';
 import '../../../inventory/presentation/bloc/inventory_bloc.dart';
@@ -42,31 +39,19 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   static const _appVersion = '2.0.0';
 
-  final TextEditingController _syncUrlController = TextEditingController();
   final TextEditingController _currencyController = TextEditingController();
-  final TextEditingController _cloudConfigController =
-      TextEditingController();
-  final TextEditingController _cloudUrlController = TextEditingController();
-  bool _syncing = false;
-  bool _cloudSyncing = false;
   bool _backingUp = false;
 
   @override
   void initState() {
     super.initState();
     context.read<PrinterBloc>().add(InitPrinterEvent());
-    _syncUrlController.text = SyncHelper.getUrl() ?? '';
     _currencyController.text = appSettings.value.currencySymbol;
-    _cloudConfigController.text = CloudSyncHelper.configJson() ?? '';
-    _cloudUrlController.text = CloudSyncHelper.dashboardUrl() ?? '';
   }
 
   @override
   void dispose() {
-    _syncUrlController.dispose();
     _currencyController.dispose();
-    _cloudConfigController.dispose();
-    _cloudUrlController.dispose();
     super.dispose();
   }
 
@@ -234,234 +219,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                 ],
               ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------- sync
-
-  Future<void> _syncNow() async {
-    final l10n = context.l10n;
-    if ((SyncHelper.getUrl() ?? '').trim().isEmpty) {
-      _snack(l10n.t('sync_url_missing'), color: Colors.orange);
-      return;
-    }
-    setState(() => _syncing = true);
-    final result = await SyncHelper.syncAll();
-    if (!mounted) return;
-    setState(() => _syncing = false);
-    if (result.ok) {
-      if (result.pulledProducts > 0) {
-        context.read<ProductBloc>().add(LoadProducts());
-      }
-      _snack(
-          '${l10n.t('sync_success')} · ${l10n.t('sync_summary', {
-                'pushed': result.pushed,
-                'pulled': result.pulledProducts
-              })}',
-          color: Colors.green);
-    } else {
-      _snack(l10n.t('sync_failed', {'error': result.error ?? ''}),
-          color: Colors.red);
-    }
-  }
-
-  Future<void> _resendAll() async {
-    final l10n = context.l10n;
-    await SyncHelper.enqueueEverything();
-    if (!mounted) return;
-    setState(() {});
-    _snack(l10n.t('queued_count', {'count': SyncHelper.pendingCount}),
-        color: Colors.green);
-  }
-
-  // ------------------------------------------------------- cloud (Firebase)
-
-  Future<void> _saveCloudConfig() async {
-    final l10n = context.l10n;
-    try {
-      await CloudSyncHelper.saveConfig(_cloudConfigController.text);
-      if (!mounted) return;
-      setState(() {});
-      _snack(l10n.t('cloud_config_saved',
-          {'project': CloudSyncHelper.projectId() ?? ''}),
-          color: Colors.green);
-    } on FormatException catch (e) {
-      _snack(l10n.t('cloud_config_invalid', {'error': e.message}),
-          color: Colors.red);
-    } catch (e) {
-      _snack(l10n.t('cloud_sync_failed', {'error': e.toString()}),
-          color: Colors.red);
-    }
-  }
-
-  Future<void> _cloudSyncNow() async {
-    final l10n = context.l10n;
-    if (!CloudSyncHelper.hasConfig()) {
-      _snack(l10n.t('cloud_needs_config'), color: Colors.orange);
-      return;
-    }
-    setState(() => _cloudSyncing = true);
-    final result = await CloudSyncHelper.syncAll();
-    if (!mounted) return;
-    setState(() => _cloudSyncing = false);
-    if (result.ok) {
-      if (result.pulledProducts > 0) {
-        context.read<ProductBloc>().add(LoadProducts());
-      }
-      _snack(
-          '${l10n.t('cloud_sync_success')} · ${l10n.t('sync_summary', {
-                'pushed': result.pushed,
-                'pulled': result.pulledProducts
-              })}',
-          color: Colors.green);
-    } else {
-      _snack(l10n.t('cloud_sync_failed', {'error': result.error ?? ''}),
-          color: Colors.red);
-    }
-  }
-
-  Future<void> _openCloudDashboard() async {
-    final raw = _cloudUrlController.text.trim();
-    if (raw.isEmpty) return;
-    final uri = Uri.tryParse(raw);
-    if (uri == null) return;
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // No browser / unsupported scheme: best effort only.
-    }
-  }
-
-  Widget _buildCloudSync() {
-    final l10n = context.l10n;
-    final project = CloudSyncHelper.projectId();
-    final configured = project != null && project.isNotEmpty;
-    final last = CloudSyncHelper.lastSyncAt();
-    final lastText = last == null
-        ? l10n.t('never')
-        : DateFormat('dd/MM/yyyy HH:mm').format(last);
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (configured)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.cloud_done, color: Colors.teal, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                        l10n.t('cloud_connected', {'project': project}),
-                        style: const TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-          _label(l10n.t('cloud_config_label')),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _cloudConfigController,
-            maxLines: 5,
-            textDirection: TextDirection.ltr,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-            decoration: InputDecoration(
-              hintText: '{"apiKey": "...", "projectId": "...", ...}',
-              isDense: true,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _saveCloudConfig,
-                icon: const Icon(Icons.cloud_upload, size: 18),
-                label: Text(l10n.t('cloud_save')),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(l10n.t('cloud_config_hint'),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color:
-                            Theme.of(context).textTheme.bodySmall?.color)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _label(l10n.t('cloud_dashboard_url')),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _cloudUrlController,
-                  keyboardType: TextInputType.url,
-                  textDirection: TextDirection.ltr,
-                  decoration: InputDecoration(
-                    hintText: 'https://my-shop.web.app',
-                    isDense: true,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onChanged: (v) => CloudSyncHelper.setDashboardUrl(v.trim()),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.open_in_browser, size: 20),
-                tooltip: l10n.t('cloud_open_dashboard'),
-                onPressed: _openCloudDashboard,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (configured) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${l10n.t('cloud_last_sync', {'time': lastText})}\n${l10n.t('sync_pending', {'count': CloudSyncHelper.pendingCount})}',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).textTheme.bodySmall?.color),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _cloudSyncing ? null : _cloudSyncNow,
-                  icon: _cloudSyncing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.cloud_sync, size: 18),
-                  label: Text(l10n.t('cloud_sync_now')),
-                ),
-              ],
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.t('cloud_auto_sync'),
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text(l10n.t('cloud_auto_sync_hint'),
-                  style: const TextStyle(fontSize: 11)),
-              value: CloudSyncHelper.isAutoSyncEnabled(),
-              onChanged: (v) async {
-                await CloudSyncHelper.setAutoSyncEnabled(v);
-                if (mounted) setState(() {});
-              },
-            ),
-          ],
-          const SizedBox(height: 4),
-          Text(l10n.t('cloud_sync_hint'),
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).textTheme.bodySmall?.color)),
-        ],
       ),
     );
   }
@@ -787,12 +544,6 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 20),
               _header(l10n.t('data')),
               _buildBackup(),
-              const SizedBox(height: 20),
-              _header(l10n.t('website_sync')),
-              _buildSync(),
-              const SizedBox(height: 20),
-              _header(l10n.t('cloud_sync')),
-              _buildCloudSync(),
               const SizedBox(height: 20),
               _header(l10n.t('about')),
               _group([
@@ -1190,149 +941,6 @@ class _SettingsPageState extends State<SettingsPage> {
               if (mounted) setState(() {});
             },
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSync() {
-    final l10n = context.l10n;
-    final token = SyncHelper.getOrCreateToken();
-    final scansEnabled = SyncHelper.isEnabled();
-    final fullSync = SyncHelper.isFullSyncEnabled();
-    final autoSync = SyncHelper.isAutoSyncEnabled();
-    final pending = SyncHelper.pendingCount;
-    final last = SyncHelper.lastSyncAt();
-    final lastText = last == null
-        ? l10n.t('never')
-        : DateFormat('dd/MM/yyyy HH:mm').format(last);
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _label(l10n.t('your_token')),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(token,
-                      textDirection: TextDirection.ltr,
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 12)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 20),
-                tooltip: l10n.t('copy_token'),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: token));
-                  _snack(l10n.t('token_copied'), color: Colors.green);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(l10n.t('token_hint'),
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).textTheme.bodySmall?.color)),
-          const SizedBox(height: 16),
-          _label(l10n.t('website_url')),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _syncUrlController,
-            keyboardType: TextInputType.url,
-            textDirection: TextDirection.ltr,
-            decoration: InputDecoration(
-              hintText: 'https://your-website.com',
-              isDense: true,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onChanged: (value) => SyncHelper.setUrl(value.trim()),
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.t('send_scans'),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            subtitle: Text(l10n.t('send_scans_hint'),
-                style: const TextStyle(fontSize: 11)),
-            value: scansEnabled,
-            onChanged: (v) async {
-              await SyncHelper.setEnabled(v);
-              if (mounted) setState(() {});
-            },
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.t('full_sync'),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            subtitle: Text(l10n.t('full_sync_hint'),
-                style: const TextStyle(fontSize: 11)),
-            value: fullSync,
-            onChanged: (v) async {
-              await SyncHelper.setFullSyncEnabled(v);
-              if (v && pending == 0) await SyncHelper.enqueueEverything();
-              if (mounted) setState(() {});
-            },
-          ),
-          if (fullSync) ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.t('auto_sync'),
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text(l10n.t('auto_sync_hint'),
-                  style: const TextStyle(fontSize: 11)),
-              value: autoSync,
-              onChanged: (v) async {
-                await SyncHelper.setAutoSyncEnabled(v);
-                if (mounted) setState(() {});
-              },
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${l10n.t('last_sync', {'time': lastText})}\n${l10n.t('sync_pending', {'count': pending})}',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).textTheme.bodySmall?.color),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _syncing ? null : _syncNow,
-                  icon: _syncing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.sync, size: 18),
-                  label: Text(l10n.t('sync_now')),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              onPressed: _resendAll,
-              icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-              label: Text(l10n.t('resend_all')),
-            ),
-            Text(l10n.t('resend_all_hint'),
-                style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).textTheme.bodySmall?.color)),
-          ],
         ],
       ),
     );

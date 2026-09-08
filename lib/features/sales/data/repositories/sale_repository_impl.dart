@@ -1,7 +1,6 @@
 import 'package:fpdart/fpdart.dart';
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -34,7 +33,6 @@ class SaleRepositoryImpl implements SaleRepository {
       }
       toStore = toStore.copyWith(updatedAt: DateTime.now());
       await HiveDatabase.salesBox.put(toStore.id, toStore.toMap());
-      await SyncQueue.enqueue('sale', toStore.id, SyncQueue.opUpsert);
       return Right(toStore);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -45,7 +43,6 @@ class SaleRepositoryImpl implements SaleRepository {
   Future<Either<Failure, void>> deleteSale(String id) async {
     try {
       await HiveDatabase.salesBox.delete(id);
-      await SyncQueue.enqueue('sale', id, SyncQueue.opDelete);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

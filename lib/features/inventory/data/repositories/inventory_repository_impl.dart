@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/purchase.dart';
 import '../../domain/entities/stock_movement.dart';
 import '../../domain/repositories/inventory_repository.dart';
@@ -46,7 +45,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
           updatedAt: now,
         );
         await productBox.put(updated.id, updated);
-        await SyncQueue.enqueue('product', updated.id, SyncQueue.opUpsert);
 
         await _putMovement(StockMovement(
           id: _uuid.v4(),
@@ -63,7 +61,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
       }
 
       await HiveDatabase.purchasesBox.put(purchase.id, purchase.toMap());
-      await SyncQueue.enqueue('purchase', purchase.id, SyncQueue.opUpsert);
       return Right(purchase);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -102,7 +99,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
       final updated = product.copyWith(
           stock: clamped, trackStock: true, updatedAt: DateTime.now());
       await productBox.put(updated.id, updated);
-      await SyncQueue.enqueue('product', updated.id, SyncQueue.opUpsert);
       await _putMovement(StockMovement(
         id: _uuid.v4(),
         productId: product.id,
@@ -135,7 +131,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
 
   Future<void> _putMovement(StockMovement m) async {
     await HiveDatabase.stockMovementsBox.put(m.id, m.toMap());
-    await SyncQueue.enqueue('stock_movement', m.id, SyncQueue.opUpsert);
     // Keep the audit trail bounded so the box never grows unbounded on a
     // busy shop: keep the most recent 5000 movements.
     final box = HiveDatabase.stockMovementsBox;

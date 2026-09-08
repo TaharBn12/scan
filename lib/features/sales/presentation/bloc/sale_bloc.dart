@@ -3,7 +3,6 @@ import 'package:equatable/equatable.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/usecases/sale_usecases.dart';
 import '../../../../core/usecase/usecase.dart';
-import '../../../../core/utils/sync_helper.dart';
 import '../../../billing/domain/entities/payment_method.dart';
 
 part 'sale_event.dart';
@@ -46,9 +45,6 @@ class SaleBloc extends Bloc<SaleEvent, SaleState> {
       (stored) {
         emit(state.copyWith(lastSaved: stored));
         add(LoadSales());
-        // Fire-and-forget: push the new sale to the website / cloud while
-        // online (no-op when auto-sync is off or there is no network).
-        SyncHelper.autoSync();
       },
     );
   }
