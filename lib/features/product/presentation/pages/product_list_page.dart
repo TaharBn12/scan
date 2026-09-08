@@ -60,7 +60,7 @@ class _ProductListPageState extends State<ProductListPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(l10n.t('export_failed', {'error': e})),
-          backgroundColor: Colors.red));
+          backgroundColor: AppTheme.danger));
     }
   }
 
@@ -77,12 +77,12 @@ class _ProductListPageState extends State<ProductListPage> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content:
               Text(l10n.t('imported_products', {'count': imported.length})),
-          backgroundColor: Colors.green));
+          backgroundColor: AppTheme.success));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(l10n.t('import_failed')),
-          backgroundColor: Colors.red));
+          backgroundColor: AppTheme.danger));
     }
   }
 
@@ -110,7 +110,7 @@ class _ProductListPageState extends State<ProductListPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final borderColor = Colors.grey[100]!;
+    final borderColor = context.borderColor;
 
     return Scaffold(
       appBar: AppBar(
@@ -135,7 +135,7 @@ class _ProductListPageState extends State<ProductListPage> {
                   isLabelVisible: low > 0,
                   label: Text('$low'),
                   child: Icon(Icons.warning_amber_rounded,
-                      color: low > 0 ? Colors.orange : Colors.grey),
+                      color: low > 0 ? AppTheme.warning : Colors.grey),
                 ),
               );
             },
@@ -248,7 +248,7 @@ class _ProductListPageState extends State<ProductListPage> {
                           decoration: InputDecoration(
                             hintText: l10n.t('scan_or_enter_barcode'),
                             prefixIcon:
-                                Icon(Icons.search, color: Colors.grey[400]),
+                                Icon(Icons.search, color: context.mutedColor),
                             suffixIcon: _searchQuery.isEmpty
                                 ? null
                                 : IconButton(
@@ -302,11 +302,11 @@ class _ProductListPageState extends State<ProductListPage> {
                 if (state.status == ProductStatus.success) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(l10n.t(state.message!)),
-                      backgroundColor: Colors.green));
+                      backgroundColor: AppTheme.success));
                 } else if (state.status == ProductStatus.error) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(l10n.t(state.message!)),
-                      backgroundColor: Colors.red));
+                      backgroundColor: AppTheme.danger));
                 }
               },
               builder: (context, state) {
@@ -402,7 +402,7 @@ class _ProductListPageState extends State<ProductListPage> {
                 Navigator.pop(innerContext);
               },
               child:
-                  Text(l10n.delete, style: const TextStyle(color: Colors.red)),
+                  Text(l10n.delete, style: const TextStyle(color: AppTheme.danger)),
             ),
           ],
         );
@@ -460,7 +460,7 @@ class _ProductTile extends StatelessWidget {
                       else
                         l10n.t('no_barcode_manual'),
                     ].join(' · '),
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    style: TextStyle(fontSize: 11, color: context.mutedColor),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 6),
@@ -473,7 +473,7 @@ class _ProductTile extends StatelessWidget {
                         '${Money.format(product.price)} / $unitShort',
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: Colors.grey[700]),
+                            color: Theme.of(context).colorScheme.onSurface),
                       ),
                       if (product.trackStock)
                         _StockBadge(product: product, unitShort: unitShort),
@@ -489,7 +489,7 @@ class _ProductTile extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _actionIcon(Icons.add_box_outlined, Colors.green, onRestock,
+                  _actionIcon(Icons.add_box_outlined, AppTheme.success, onRestock,
                       tooltip: l10n.t('restock')),
                   const SizedBox(width: 6),
                   _actionIcon(
@@ -497,7 +497,7 @@ class _ProductTile extends StatelessWidget {
                       tooltip: l10n.edit),
                   const SizedBox(width: 6),
                   _actionIcon(
-                      Icons.delete_outline_rounded, Colors.red, onDelete,
+                      Icons.delete_outline_rounded, AppTheme.danger, onDelete,
                       tooltip: l10n.delete),
                 ],
               ),
@@ -537,14 +537,14 @@ class _StockBadge extends StatelessWidget {
     final Color color;
     final String text;
     if (product.isOutOfStock) {
-      color = Colors.red;
+      color = AppTheme.danger;
       text = l10n.t('out_of_stock');
     } else if (product.isLowStock) {
-      color = Colors.orange;
+      color = AppTheme.warning;
       text = l10n.t('low_stock_badge',
           {'count': '${formatQty(product.stock)} $unitShort'});
     } else {
-      color = Colors.green;
+      color = AppTheme.success;
       text = l10n.t('in_stock', {'count': '${formatQty(product.stock)} $unitShort'});
     }
     return Container(

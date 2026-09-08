@@ -98,14 +98,14 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
           } else if (state is ShopOperationSuccess) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(l10n.t('shop_saved')),
-                backgroundColor: Colors.green));
+                backgroundColor: AppTheme.success));
             // Reload so the rest of the app sees the new details.
             context.read<ShopBloc>().add(LoadShopEvent());
             if (context.canPop()) context.pop();
           } else if (state is ShopError) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(l10n.t(state.message)),
-                backgroundColor: Colors.red));
+                backgroundColor: AppTheme.danger));
           }
         },
         buildWhen: (previous, current) =>

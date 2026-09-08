@@ -53,11 +53,11 @@ class LowStockPage extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.check_circle_outline,
-                        size: 64, color: Colors.green),
+                        size: 64, color: AppTheme.success),
                     const SizedBox(height: 16),
                     Text(l10n.t('no_low_stock'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey[600])),
+                        style: TextStyle(color: context.mutedColor)),
                   ],
                 ),
               ),
@@ -72,20 +72,20 @@ class LowStockPage extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.12),
+                  color: AppTheme.warning.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.warning_amber_rounded,
-                        color: Colors.orange),
+                        color: AppTheme.warning),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                           l10n.t('low_stock_count', {'count': low.length}),
                           style: const TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: Colors.orange)),
+                              color: AppTheme.warning)),
                     ),
                   ],
                 ),
@@ -115,7 +115,7 @@ class _LowStockTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final out = product.isOutOfStock;
-    final color = out ? Colors.red : Colors.orange;
+    final color = out ? AppTheme.danger : AppTheme.warning;
     final unit = l10n.t(product.unit.shortKey);
     return Container(
       padding: const EdgeInsets.all(14),
@@ -155,7 +155,7 @@ class _LowStockTile extends StatelessWidget {
                 ),
                 Text(
                   '${l10n.t('threshold_label', {'count': product.lowStockThreshold})} · ${Money.format(product.price)}',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                  style: TextStyle(color: context.mutedColor, fontSize: 11),
                 ),
               ],
             ),

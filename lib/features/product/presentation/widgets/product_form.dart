@@ -127,7 +127,7 @@ class _ProductFormState extends State<ProductForm> {
       if (clash.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(l10n.t('product_exists', {'barcode': barcode})),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.danger,
         ));
         return;
       }

@@ -144,7 +144,7 @@ class _InvoicePageState extends State<InvoicePage> {
     if (stored == null) {
       setState(() => _isSaving = false);
       final msg = context.read<SaleBloc>().state.message;
-      _snack(msg ?? l10n.error, color: Colors.red);
+      _snack(msg ?? l10n.error, color: AppTheme.danger);
       return;
     }
 
@@ -156,7 +156,7 @@ class _InvoicePageState extends State<InvoicePage> {
       _isDraft = false;
       _isSaving = false;
     });
-    _snack(l10n.t('invoice_saved'), color: Colors.green);
+    _snack(l10n.t('invoice_saved'), color: AppTheme.success);
 
     final autoPrint = HiveDatabase.settingsBox.get('auto_print') == true;
     if (autoPrint) {
@@ -173,12 +173,12 @@ class _InvoicePageState extends State<InvoicePage> {
       if (!printerHelper.isConnected) {
         final savedMac = HiveDatabase.settingsBox.get('printer_mac') as String?;
         if (savedMac == null || savedMac.isEmpty) {
-          if (!silentIfNoPrinter) _snack(l10n.t('no_printer'), color: Colors.red);
+          if (!silentIfNoPrinter) _snack(l10n.t('no_printer'), color: AppTheme.danger);
           return;
         }
         final connected = await printerHelper.connect(savedMac);
         if (!connected) {
-          _snack(l10n.t('printer_connect_failed'), color: Colors.red);
+          _snack(l10n.t('printer_connect_failed'), color: AppTheme.danger);
           return;
         }
       }
@@ -210,9 +210,9 @@ class _InvoicePageState extends State<InvoicePage> {
         cashierName: _sale.cashierName,
         footer: shop.footerText.isNotEmpty ? shop.footerText : 'Thank you!',
       );
-      _snack(l10n.t('printed_successfully'), color: Colors.green);
+      _snack(l10n.t('printed_successfully'), color: AppTheme.success);
     } catch (e) {
-      _snack(l10n.t('print_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('print_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _isPrinting = false);
     }
@@ -225,7 +225,7 @@ class _InvoicePageState extends State<InvoicePage> {
     try {
       await PdfHelper.shareInvoice(sale: _sale, shop: _shop(), l10n: l10n);
     } catch (e) {
-      _snack(l10n.t('pdf_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('pdf_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -353,13 +353,13 @@ class _InvoicePageState extends State<InvoicePage> {
     final stored = await _persist(updated);
     if (!mounted) return;
     if (stored == null) {
-      _snack(l10n.error, color: Colors.red);
+      _snack(l10n.error, color: AppTheme.danger);
       return;
     }
     setState(() => _sale = stored);
     _snack(
         stored.isPaid ? l10n.t('marked_as_paid') : l10n.t('payment_recorded'),
-        color: Colors.green);
+        color: AppTheme.success);
   }
 
   Future<void> _confirmRefund() async {
@@ -377,7 +377,7 @@ class _InvoicePageState extends State<InvoicePage> {
           TextButton(
             onPressed: () => Navigator.pop(dialog, true),
             child: Text(l10n.t('refund'),
-                style: const TextStyle(color: Colors.red)),
+                style: const TextStyle(color: AppTheme.danger)),
           ),
         ],
       ),
@@ -389,7 +389,7 @@ class _InvoicePageState extends State<InvoicePage> {
     final stored = await _persist(refunded);
     if (!mounted) return;
     if (stored == null) {
-      _snack(l10n.error, color: Colors.red);
+      _snack(l10n.error, color: AppTheme.danger);
       return;
     }
     _applyStock(stored, sign: 1, type: StockMovementType.refund);
@@ -465,7 +465,7 @@ class _InvoicePageState extends State<InvoicePage> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppTheme.success,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -483,8 +483,8 @@ class _InvoicePageState extends State<InvoicePage> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: AppTheme.danger,
+                      side: const BorderSide(color: AppTheme.danger),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12))),
@@ -712,7 +712,7 @@ class _ReceiptCard extends StatelessWidget {
           if (sale.discountAmount > 0) ...[
             _kv(l10n.subtotal, Money.format(sale.subtotal), muted: muted),
             _kv(l10n.discount, '- ${Money.format(sale.discountAmount)}',
-                muted: muted, valueColor: Colors.green),
+                muted: muted, valueColor: AppTheme.success),
             const SizedBox(height: 4),
           ],
           Row(
@@ -736,7 +736,7 @@ class _ReceiptCard extends StatelessWidget {
                 muted: muted),
             _kv(l10n.t('remaining'), Money.format(sale.amountDue),
                 muted: muted,
-                valueColor: sale.amountDue > 0 ? Colors.red : Colors.green,
+                valueColor: sale.amountDue > 0 ? AppTheme.danger : AppTheme.success,
                 bold: true),
             if (sale.payments.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -817,14 +817,14 @@ class _StatusChip extends StatelessWidget {
     } else if (sale.isCredit && !sale.isPaid) {
       if (sale.amountPaid > 0) {
         text = l10n.t('partially_paid');
-        color = Colors.orange;
+        color = AppTheme.warning;
       } else {
         text = l10n.t('unpaid');
-        color = Colors.red;
+        color = AppTheme.danger;
       }
     } else {
       text = l10n.t('paid');
-      color = Colors.green;
+      color = AppTheme.success;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

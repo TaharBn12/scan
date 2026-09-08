@@ -6,6 +6,7 @@ import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../domain/entities/app_user.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Manage cashiers / managers. When multi-user mode is switched on, the app
 /// asks "who is working?" at start-up and each user signs in with a PIN.
@@ -138,7 +139,7 @@ class _UsersPageState extends State<UsersPage> {
                 result.fold(
                   (f) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(l10n.t(f.message)),
-                      backgroundColor: Colors.red)),
+                      backgroundColor: AppTheme.danger)),
                   (_) => Navigator.pop(dialog, true),
                 );
               },
@@ -149,7 +150,7 @@ class _UsersPageState extends State<UsersPage> {
       ),
     );
     if (saved == true && mounted) {
-      _snack(l10n.t('user_saved'), color: Colors.green);
+      _snack(l10n.t('user_saved'), color: AppTheme.success);
       await _load();
     }
   }
@@ -168,7 +169,7 @@ class _UsersPageState extends State<UsersPage> {
           TextButton(
               onPressed: () => Navigator.pop(d, true),
               child: Text(l10n.delete,
-                  style: const TextStyle(color: Colors.red))),
+                  style: const TextStyle(color: AppTheme.danger))),
         ],
       ),
     );
@@ -176,7 +177,7 @@ class _UsersPageState extends State<UsersPage> {
     final result = await _repo.deleteUser(u.id);
     if (!mounted) return;
     result.fold(
-      (f) => _snack(l10n.t(f.message), color: Colors.red),
+      (f) => _snack(l10n.t(f.message), color: AppTheme.danger),
       (_) => _load(),
     );
   }
@@ -184,7 +185,7 @@ class _UsersPageState extends State<UsersPage> {
   Future<void> _toggleMultiUser(bool enabled) async {
     final l10n = context.l10n;
     if (enabled && !_users.any((u) => u.isAdmin)) {
-      _snack(l10n.t('cannot_delete_last_admin'), color: Colors.red);
+      _snack(l10n.t('cannot_delete_last_admin'), color: AppTheme.danger);
       return;
     }
     await sessionController.setMultiUser(enabled);
@@ -302,9 +303,9 @@ class _UsersPageState extends State<UsersPage> {
                                 dense: true,
                                 contentPadding: EdgeInsets.zero,
                                 leading: const Icon(Icons.delete_outline,
-                                    color: Colors.red),
+                                    color: AppTheme.danger),
                                 title: Text(l10n.delete,
-                                    style: const TextStyle(color: Colors.red)),
+                                    style: const TextStyle(color: AppTheme.danger)),
                               ),
                             ),
                           ],

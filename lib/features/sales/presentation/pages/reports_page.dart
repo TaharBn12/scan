@@ -153,7 +153,7 @@ class _ReportsPageState extends State<ReportsPage>
           break;
       }
     } catch (e) {
-      _snack(l10n.t('export_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('export_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -215,11 +215,11 @@ class _ReportsPageState extends State<ReportsPage>
     if (!printer.isConnected) {
       final mac = HiveDatabase.settingsBox.get('printer_mac') as String?;
       if (mac == null || mac.isEmpty) {
-        _snack(l10n.t('no_printer'), color: Colors.red);
+        _snack(l10n.t('no_printer'), color: AppTheme.danger);
         return;
       }
       if (!await printer.connect(mac)) {
-        _snack(l10n.t('printer_connect_failed'), color: Colors.red);
+        _snack(l10n.t('printer_connect_failed'), color: AppTheme.danger);
         return;
       }
     }
@@ -242,7 +242,7 @@ class _ReportsPageState extends State<ReportsPage>
         MapEntry('Net profit', Money.plain(state.periodProfit - expenses)),
       ],
     );
-    _snack(l10n.t('printed_successfully'), color: Colors.green);
+    _snack(l10n.t('printed_successfully'), color: AppTheme.success);
   }
 
   void _showExportSheet() {
@@ -522,14 +522,14 @@ class _OverviewTab extends StatelessWidget {
                 child: _StatTile(
                     label: l10n.t('gross_profit'),
                     value: Money.format(state.periodProfit),
-                    color: Colors.green,
+                    color: AppTheme.success,
                     icon: Icons.trending_up)),
             const SizedBox(width: 10),
             Expanded(
                 child: _StatTile(
                     label: l10n.t('expenses_total'),
                     value: Money.format(expenses),
-                    color: Colors.red,
+                    color: AppTheme.danger,
                     icon: Icons.receipt_long_outlined,
                     onTap: () => context.push('/expenses'))),
           ],
@@ -538,7 +538,7 @@ class _OverviewTab extends StatelessWidget {
         _StatTile(
           label: l10n.t('net_profit'),
           value: Money.format(net),
-          color: net >= 0 ? const Color(0xFF00B894) : Colors.red,
+          color: net >= 0 ? const Color(0xFF00B894) : AppTheme.danger,
           icon: Icons.account_balance_wallet_outlined,
           big: true,
           subtitle: l10n.t('profit_label'),
@@ -568,7 +568,7 @@ class _OverviewTab extends StatelessWidget {
                 child: _StatTile(
                     label: l10n.discount,
                     value: Money.format(state.periodDiscounts),
-                    color: Colors.orange,
+                    color: AppTheme.warning,
                     icon: Icons.local_offer_outlined)),
             const SizedBox(width: 10),
             Expanded(
@@ -653,11 +653,11 @@ class _OverviewTab extends StatelessWidget {
         if (productState.lowStockProducts.isNotEmpty) ...[
           const SizedBox(height: 10),
           ListTile(
-            tileColor: Colors.orange.withValues(alpha: 0.1),
+            tileColor: AppTheme.warning.withValues(alpha: 0.1),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12)),
             leading: const Icon(Icons.warning_amber_rounded,
-                color: Colors.orange),
+                color: AppTheme.warning),
             title: Text(l10n.t('low_stock_count',
                 {'count': productState.lowStockProducts.length})),
             trailing: Icon(Icons.adaptive.arrow_forward, size: 18),
@@ -983,7 +983,7 @@ class _DebtsTab extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.check_circle_outline,
-                size: 56, color: Colors.green.withValues(alpha: 0.6)),
+                size: 56, color: AppTheme.success.withValues(alpha: 0.6)),
             const SizedBox(height: 12),
             Text(l10n.t('no_outstanding_credit'),
                 style: TextStyle(color: theme.disabledColor)),
@@ -1010,14 +1010,14 @@ class _DebtsTab extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.08),
+            color: AppTheme.danger.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
+            border: Border.all(color: AppTheme.danger.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
               const Icon(Icons.account_balance_wallet_outlined,
-                  color: Colors.red),
+                  color: AppTheme.danger),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(l10n.t('total_outstanding'),
@@ -1027,7 +1027,7 @@ class _DebtsTab extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.red)),
+                      color: AppTheme.danger)),
             ],
           ),
         ),
@@ -1037,10 +1037,10 @@ class _DebtsTab extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 10),
             child: ExpansionTile(
               leading: CircleAvatar(
-                backgroundColor: Colors.red.withValues(alpha: 0.1),
+                backgroundColor: AppTheme.danger.withValues(alpha: 0.1),
                 child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?',
                     style: const TextStyle(
-                        color: Colors.red, fontWeight: FontWeight.bold)),
+                        color: AppTheme.danger, fontWeight: FontWeight.bold)),
               ),
               title: Text(name,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1050,7 +1050,7 @@ class _DebtsTab extends StatelessWidget {
                   Money.format(
                       groups[name]!.fold(0.0, (s, x) => s + x.amountDue)),
                   style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.red)),
+                      fontWeight: FontWeight.bold, color: AppTheme.danger)),
               children: [
                 for (final s in groups[name]!)
                   ListTile(
@@ -1061,7 +1061,7 @@ class _DebtsTab extends StatelessWidget {
                         '${l10n.total}: ${Money.format(s.total)} · ${l10n.t('paid_amount')}: ${Money.format(s.amountPaid)}'),
                     trailing: Text(Money.format(s.amountDue),
                         style: const TextStyle(
-                            fontWeight: FontWeight.bold, color: Colors.red)),
+                            fontWeight: FontWeight.bold, color: AppTheme.danger)),
                     onTap: () => context.push('/invoice',
                         extra: InvoiceRouteArgs(sale: s, isDraft: false)),
                   ),
@@ -1169,12 +1169,12 @@ class _HistoryTabState extends State<_HistoryTab> {
                       color = Colors.grey;
                       status = l10n.t('refunded');
                     } else if (s.isUnpaidCredit) {
-                      color = s.amountPaid > 0 ? Colors.orange : Colors.red;
+                      color = s.amountPaid > 0 ? AppTheme.warning : AppTheme.danger;
                       status = s.amountPaid > 0
                           ? l10n.t('partially_paid')
                           : l10n.t('unpaid');
                     } else {
-                      color = Colors.green;
+                      color = AppTheme.success;
                       status = l10n.t('paid');
                     }
                     return Card(

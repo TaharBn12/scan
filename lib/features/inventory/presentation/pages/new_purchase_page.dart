@@ -16,6 +16,7 @@ import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/purchase.dart';
 import '../bloc/inventory_bloc.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Stock-in screen: pick products (search or scan), enter quantity received
 /// and unit cost, then "Receive" adds everything to stock in one go.
@@ -288,7 +289,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(result?.message ?? l10n.error),
-          backgroundColor: Colors.red));
+          backgroundColor: AppTheme.danger));
       return;
     }
 
@@ -311,7 +312,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(l10n.t('purchase_saved')),
-        backgroundColor: Colors.green));
+        backgroundColor: AppTheme.success));
     if (context.canPop()) {
       context.pop();
     } else {
@@ -555,7 +556,7 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                         ),
                         trailing: p.isLowStock
                             ? Icon(Icons.warning_amber_rounded,
-                                color: Colors.orange.shade700)
+                                color: AppTheme.warning.shade700)
                             : null,
                         onTap: () => Navigator.pop(context, p),
                       );

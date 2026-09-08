@@ -84,9 +84,9 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final file = await BackupHelper.exportAndShare(subject: l10n.appTitle);
       _snack(l10n.t('backup_saved', {'path': file.path.split('/').last}),
-          color: Colors.green);
+          color: AppTheme.success);
     } catch (e) {
-      _snack(l10n.t('export_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('export_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _backingUp = false);
     }
@@ -95,7 +95,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _copyBackupToClipboard() async {
     final l10n = context.l10n;
     await Clipboard.setData(ClipboardData(text: BackupHelper.exportAsJson()));
-    _snack(l10n.t('backup_copied'), color: Colors.green);
+    _snack(l10n.t('backup_copied'), color: AppTheme.success);
   }
 
   Future<void> _restore(Future<BackupImportSummary> Function() run) async {
@@ -110,9 +110,9 @@ class _SettingsPageState extends State<SettingsPage> {
             'sales': summary.salesImported,
             'customers': summary.customersImported,
           }),
-          color: Colors.green);
+          color: AppTheme.success);
     } catch (_) {
-      _snack(l10n.t('import_failed'), color: Colors.red);
+      _snack(l10n.t('import_failed'), color: AppTheme.danger);
     }
   }
 
@@ -280,7 +280,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final current = await _askPin(l10n.t('current_pin'));
     if (current == null) return false;
     if (!PinHelper.verifyAppPin(current)) {
-      _snack(l10n.t('wrong_pin'), color: Colors.red);
+      _snack(l10n.t('wrong_pin'), color: AppTheme.danger);
       return false;
     }
     return true;
@@ -295,7 +295,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirm = await _askPin(l10n.t('confirm_pin'));
     if (confirm == null || !mounted) return;
     if (pin != confirm) {
-      _snack(l10n.t('pin_mismatch'), color: Colors.red);
+      _snack(l10n.t('pin_mismatch'), color: AppTheme.danger);
       return;
     }
     await PinHelper.setAppPin(pin);
@@ -303,7 +303,7 @@ class _SettingsPageState extends State<SettingsPage> {
     sessionController.refresh();
     if (!mounted) return;
     setState(() {});
-    _snack(l10n.t('pin_set'), color: Colors.green);
+    _snack(l10n.t('pin_set'), color: AppTheme.success);
   }
 
   Future<void> _removePin() async {
@@ -314,7 +314,7 @@ class _SettingsPageState extends State<SettingsPage> {
     sessionController.refresh();
     if (!mounted) return;
     setState(() {});
-    _snack(l10n.t('pin_removed'), color: Colors.green);
+    _snack(l10n.t('pin_removed'), color: AppTheme.success);
   }
 
   Future<void> _togglePin(bool enabled) async {
@@ -342,7 +342,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final devices = await helper.getBondedDevices();
     if (!mounted) return;
     if (devices.isEmpty) {
-      _snack(l10n.t('no_paired_devices'), color: Colors.orange);
+      _snack(l10n.t('no_paired_devices'), color: AppTheme.warning);
       return;
     }
     await showModalBottomSheet(
@@ -655,7 +655,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: OutlinedButton.icon(
                       onPressed: _removePin,
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red),
+                          foregroundColor: AppTheme.danger),
                       icon: const Icon(Icons.lock_open, size: 18),
                       label: Text(l10n.t('remove_pin')),
                     ),
@@ -699,9 +699,9 @@ class _SettingsPageState extends State<SettingsPage> {
         if (state.errorMessage != null &&
             (state.status == PrinterStatus.scanFailure ||
                 state.status == PrinterStatus.connectionFailure)) {
-          _snack(l10n.t(state.errorMessage!), color: Colors.red);
+          _snack(l10n.t(state.errorMessage!), color: AppTheme.danger);
         } else if (state.status == PrinterStatus.connected) {
-          _snack(l10n.t('connected_to_printer'), color: Colors.green);
+          _snack(l10n.t('connected_to_printer'), color: AppTheme.success);
         }
       },
       builder: (context, state) {
@@ -802,7 +802,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               .read<PrinterBloc>()
                               .add(DisconnectPrinterEvent()),
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red),
+                          foregroundColor: AppTheme.danger),
                       icon: const Icon(Icons.link_off, size: 18),
                       label: Text(l10n.t('disconnect')),
                     ),

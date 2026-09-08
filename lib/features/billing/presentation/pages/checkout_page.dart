@@ -76,7 +76,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (isCredit && billingState.customerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(l10n.t('customer_required_for_credit')),
-        backgroundColor: Colors.red,
+        backgroundColor: AppTheme.danger,
       ));
       return;
     }
@@ -250,18 +250,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.brMd,
         border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: AppTheme.shadow(Theme.of(context).brightness),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.brMd,
         child: Table(
           columnWidths: const {
             0: FlexColumnWidth(3),
@@ -275,15 +269,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
           children: [
             TableRow(
               decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white10
-                    : const Color(0xFFF8FAFC),
+                color: context.surfaceAltColor,
                 border: Border(bottom: BorderSide(color: borderColor)),
               ),
               children: [
-                _buildHeaderCell(l10n.t('product_name'), TextAlign.start),
-                _buildHeaderCell(l10n.price, TextAlign.end),
-                _buildHeaderCell(l10n.total, TextAlign.end),
+                _buildHeaderCell(context, l10n.t('product_name'), TextAlign.start),
+                _buildHeaderCell(context, l10n.price, TextAlign.end),
+                _buildHeaderCell(context, l10n.total, TextAlign.end),
               ],
             ),
             ...billingState.cartItems.map((item) {
@@ -291,12 +283,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
               return TableRow(
                 children: [
                   _buildDataCell(
+                    context,
                     '${formatQty(item.quantity)} $unit × ${item.product.name}',
                     TextAlign.start,
                   ),
-                  _buildDataCell(Money.format(item.unitPrice), TextAlign.end,
+                  _buildDataCell(
+                      context, Money.format(item.unitPrice), TextAlign.end,
                       isSubtitle: true),
-                  _buildDataCell(Money.format(item.total), TextAlign.end,
+                  _buildDataCell(
+                      context, Money.format(item.total), TextAlign.end,
                       isBold: true),
                 ],
               );
@@ -312,14 +307,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: const Border(top: BorderSide(color: Color(0xFFE5E5EA))),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        border: Border(top: BorderSide(color: context.borderColor)),
+        boxShadow: AppTheme.shadow(Theme.of(context).brightness, strong: true),
       ),
       child: SafeArea(
         top: false,
@@ -336,10 +325,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       children: [
                         Text(l10n.subtotal,
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500])),
+                                fontSize: 12, color: context.mutedColor)),
                         Text(Money.format(billingState.subtotal),
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500])),
+                                fontSize: 12, color: context.mutedColor)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -349,10 +338,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         Text(
                             '${l10n.discount}${billingState.discountIsPercent ? ' (${formatQty(billingState.discountValue)}%)' : ''}',
                             style: const TextStyle(
-                                fontSize: 12, color: Colors.orange)),
+                                fontSize: 12, color: AppTheme.warning)),
                         Text('-${Money.format(billingState.discountAmount)}',
                             style: const TextStyle(
-                                fontSize: 12, color: Colors.orange)),
+                                fontSize: 12, color: AppTheme.warning)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -365,17 +354,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[400],
+                          color: context.mutedColor,
                           letterSpacing: 1.2,
                         ),
                       ),
                       Text(
                         Money.format(billingState.totalAmount),
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
-                          color: Theme.of(context).colorScheme.onSurface,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ],
@@ -397,8 +386,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   BoxDecoration _cardDecoration(BuildContext context) => BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E5EA)),
+        borderRadius: AppTheme.brMd,
+        border: Border.all(color: context.borderColor),
+        boxShadow: AppTheme.shadow(Theme.of(context).brightness),
       );
 
   Widget _buildDiscountSection(BuildContext context, BillingState state) {
@@ -539,7 +529,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: change < 0 ? Colors.red : Colors.green),
+                      color: change < 0 ? AppTheme.danger : AppTheme.success),
                 ),
               ],
             ),
@@ -575,7 +565,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
           const SizedBox(height: 4),
           Text(l10n.t('initial_payment_hint'),
-              style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              style: TextStyle(fontSize: 11, color: context.mutedColor)),
           const SizedBox(height: 10),
           TextField(
             controller: _initialPaymentController,
@@ -602,7 +592,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.orange)),
+                      color: AppTheme.warning)),
             ],
           ),
         ],
@@ -638,8 +628,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       decoration: _cardDecoration(context).copyWith(
         border: Border.all(
             color: isCredit && !hasSavedCustomer
-                ? Colors.orange
-                : const Color(0xFFE5E5EA)),
+                ? AppTheme.warning
+                : context.borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,7 +662,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(l10n.t('customer_required_for_credit'),
-                  style: const TextStyle(fontSize: 12, color: Colors.orange)),
+                  style:
+                      const TextStyle(fontSize: 12, color: AppTheme.warning)),
             ),
           const SizedBox(height: 4),
           if (hasSavedCustomer)
@@ -723,23 +714,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  Widget _buildHeaderCell(String text, TextAlign align) {
+  Widget _buildHeaderCell(BuildContext context, String text, TextAlign align) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       child: Text(
         text.toUpperCase(),
         textAlign: align,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.bold,
           letterSpacing: 1,
-          color: Colors.grey,
+          color: context.mutedColor,
         ),
       ),
     );
   }
 
-  Widget _buildDataCell(String text, TextAlign align,
+  Widget _buildDataCell(BuildContext context, String text, TextAlign align,
       {bool isBold = false, bool isSubtitle = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -749,7 +740,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         style: TextStyle(
           fontSize: isSubtitle ? 12 : 14,
           fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-          color: isSubtitle ? Colors.grey[500] : null,
+          color: isSubtitle ? context.mutedColor : null,
         ),
       ),
     );
