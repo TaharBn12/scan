@@ -85,11 +85,11 @@ class FirebaseAppConfig {
         // standard one otherwise.
         authDomain: authDomain ?? '$projectId.firebaseapp.com',
         projectId: projectId,
-        storageBucket: storageBucket,
-        messagingSenderId: messagingSenderId,
-        // Only used by Firebase Auth; a placeholder keeps the SDK happy
-        // when the merchant only pasted the web-app config.
+        storageBucket: storageBucket ?? '$projectId.appspot.com',
+        // Only used by Firebase Auth / Storage; placeholders keep the SDK
+        // happy when the merchant only pasted the web-app config.
+        messagingSenderId: messagingSenderId ?? '0',
         androidClientId: androidClientId ?? '0',
-        iosClientId: iOSClientId,
+        iosClientId: iOSClientId ?? '0',
       );
 }
