@@ -80,11 +80,13 @@ class FirebaseAppConfig {
   FirebaseOptions toOptions() => FirebaseOptions(
         apiKey: apiKey,
         appId: appId,
-        authDomain: authDomain,
+        // Non-nullable in current firebase_core; console configs always
+        // carry it, fall back to the standard domain otherwise.
+        authDomain: authDomain ?? '$projectId.firebaseapp.com',
         projectId: projectId,
         storageBucket: storageBucket,
         messagingSenderId: messagingSenderId,
         androidClientId: androidClientId,
-        iOSClientId: iOSClientId,
+        iosClientId: iOSClientId,
       );
 }

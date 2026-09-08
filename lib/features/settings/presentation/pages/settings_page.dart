@@ -287,7 +287,7 @@ class _SettingsPageState extends State<SettingsPage> {
           {'project': CloudSyncHelper.projectId() ?? ''}),
           color: Colors.green);
     } on FormatException catch (e) {
-      _snack(l10n.t('cloud_config_invalid', {'error': e.message ?? ''}),
+      _snack(l10n.t('cloud_config_invalid', {'error': e.message}),
           color: Colors.red);
     } catch (e) {
       _snack(l10n.t('cloud_sync_failed', {'error': e.toString()}),
@@ -354,7 +354,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                        l10n.t('cloud_connected', {'project': project!}),
+                        l10n.t('cloud_connected', {'project': project}),
                         style: const TextStyle(fontSize: 12)),
                   ),
                 ],
