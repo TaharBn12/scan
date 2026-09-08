@@ -1,5 +1,8 @@
 # 🛒 Mobile POS & Billing App
 
+[![Flutter CI](https://github.com/TaharBn12/scan/actions/workflows/flutter_ci.yml/badge.svg)](https://github.com/TaharBn12/scan/actions/workflows/flutter_ci.yml)
+[![Download APK](https://img.shields.io/badge/download-latest%20APK-brightgreen)](https://github.com/TaharBn12/scan/releases/download/latest/billing_app-latest.apk)
+
 A feature-rich, high-performance **100% offline** billing and Point of Sale (POS) application built with Flutter. Designed for fast retail checkout: barcode scanning, thermal Bluetooth printing, stock, customers, credit, expenses and reports — all stored on the phone.
 
 > **No internet, no account, no website.** The release build does not even request the `INTERNET` permission: every byte of data lives in the shop's phone (Hive), and backups are plain files you own.
@@ -123,6 +126,17 @@ Release APK:
 ```bash
 flutter build apk --release
 ```
+
+### Automatic builds
+
+Every push runs `flutter analyze` + tests and, when they pass, builds a
+release APK and republishes it under the rolling `latest` release — so this
+link always serves the newest build:
+
+**<https://github.com/TaharBn12/scan/releases/download/latest/billing_app-latest.apk>**
+
+Add `[release]` to a commit message to also archive a permanent, versioned
+release (`billing_app-vX.Y.Z-buildN.apk`).
 
 ## 🤝 Contributing guidelines
 
