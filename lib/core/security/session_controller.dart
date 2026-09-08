@@ -30,9 +30,16 @@ class SessionController extends ChangeNotifier {
 
   AppUser? get currentUser => _currentUser;
 
+  /// True as soon as accounts exist and the shop hasn't opted out.
   bool get isMultiUser =>
       (HiveDatabase.settingsBox.get(_multiUserKey) as bool? ?? false) &&
       HiveDatabase.usersBox.isNotEmpty;
+
+  /// At least one account exists (so the login screen makes sense).
+  bool get hasAccounts => HiveDatabase.usersBox.isNotEmpty;
+
+  /// At least one account can be unlocked with a quick PIN.
+  bool get hasPinAccounts => _users.hasPinAccounts;
 
   Future<void> setMultiUser(bool enabled) async {
     await HiveDatabase.settingsBox.put(_multiUserKey, enabled);
@@ -52,12 +59,70 @@ class SessionController extends ChangeNotifier {
 
   bool get isAdmin => !isMultiUser || (_currentUser?.isAdmin ?? false);
 
+  /// The role driving permissions. Without multi-user accounts the owner is
+  /// using their own phone, so they get everything.
+  UserRole get role =>
+      isMultiUser ? (_currentUser?.role ?? UserRole.cashier) : UserRole.admin;
+
+  bool get canViewReports => !isMultiUser || role.canViewReports;
+  bool get canManageExpenses => !isMultiUser || role.canManageExpenses;
+  bool get canManageProducts => !isMultiUser || role.canManageProducts;
+  bool get canManageInventory => !isMultiUser || role.canManageInventory;
+  bool get canManageCustomers => !isMultiUser || role.canManageCustomers;
+  bool get canChangeSettings => !isMultiUser || role.canChangeSettings;
+  bool get canManageUsers => !isMultiUser || role.canManageUsers;
+
+  /// Route guard used by the router: which screens this session may open.
+  bool canOpen(String location) {
+    if (!isMultiUser) return true;
+    bool starts(String prefix) => location.startsWith(prefix);
+    if (starts('/settings') || starts('/shop') || starts('/users')) {
+      return canChangeSettings || canManageUsers;
+    }
+    if (starts('/reports')) return canViewReports;
+    if (starts('/expenses')) return canManageExpenses;
+    if (starts('/inventory')) return canManageInventory;
+    if (starts('/products/add') ||
+        starts('/products/edit') ||
+        starts('/products/low-stock') ||
+        starts('/labels')) {
+      return canManageProducts;
+    }
+    if (starts('/customers/debts')) return canManageCustomers;
+    return true;
+  }
+
   /// Whether a "lock" action makes sense right now (some PIN is configured).
   bool get canLock =>
       isMultiUser || (appSettings.value.pinEnabled && PinHelper.hasAppPin);
 
   String? get cashierId => isMultiUser ? _currentUser?.id : null;
   String? get cashierName => isMultiUser ? _currentUser?.name : null;
+
+  /// Signs in with the account identifier + password. Returns null on
+  /// success, or a localization key describing the failure.
+  Future<String?> signInWithPassword(String email, String password) async {
+    final result = _users.authenticateByPassword(email, password);
+    String? failureKey;
+    AppUser? user;
+    result.fold<void>(
+      (failure) {
+        failureKey = failure.message;
+      },
+      (value) {
+        user = value;
+      },
+    );
+    final signedIn = user;
+    if (signedIn == null) return failureKey ?? 'error';
+
+    _currentUser = signedIn;
+    await _users.setCurrentUserId(signedIn.id);
+    await _users.stampLogin(signedIn);
+    _unlocked = true;
+    notifyListeners();
+    return null;
+  }
 
   /// Tries [pin] against the app PIN (single-user) or the users list
   /// (multi-user). Returns true when unlocked.

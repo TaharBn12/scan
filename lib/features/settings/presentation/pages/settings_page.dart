@@ -427,6 +427,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: l10n.t('users_subtitle'),
                   onTap: () => context.push('/users'),
                 ),
+                if (sessionController.isMultiUser)
+                  _tile(
+                    icon: Icons.logout_rounded,
+                    title: l10n.t('sign_out'),
+                    subtitle: sessionController.currentUser == null
+                        ? ''
+                        : '${sessionController.currentUser!.name} · '
+                            '${l10n.t(sessionController.currentUser!.role.labelKey)}',
+                    showChevron: false,
+                    onTap: () async {
+                      await sessionController.lock();
+                      if (context.mounted) context.go('/login');
+                    },
+                  ),
               ]),
               const SizedBox(height: 20),
               _header(l10n.t('appearance')),

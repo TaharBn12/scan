@@ -3,11 +3,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:billing_app/core/l10n/strings_ar.dart';
 import 'package:billing_app/core/l10n/strings_en.dart';
 import 'package:billing_app/core/l10n/strings_fr.dart';
+import 'package:billing_app/core/security/auth_helper.dart';
 import 'package:billing_app/core/utils/cash_change.dart';
 import 'package:billing_app/core/utils/search_text.dart';
 import 'package:billing_app/features/billing/data/held_cart_store.dart';
 import 'package:billing_app/features/product/domain/reorder_advisor.dart';
 import 'package:billing_app/features/shifts/data/shift_store.dart';
+import 'package:billing_app/features/users/domain/entities/app_user.dart';
 import 'package:billing_app/features/billing/domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/sales/domain/entities/sale.dart';
@@ -307,6 +309,103 @@ void main() {
       expect(copy.openedBy, 'Amine');
       expect(copy.openingFloat, 2000);
       expect(copy.expectedCash, 2000);
+    });
+  });
+
+  group('Account passwords', () {
+    test('the same password + salt always gives the same hash', () {
+      const salt = 'fixed-salt';
+      final a = AuthHelper.hashPassword('Bechar2026', salt);
+      final b = AuthHelper.hashPassword('Bechar2026', salt);
+      expect(a, b);
+      expect(a.isNotEmpty, isTrue);
+    });
+
+    test('a different salt gives a different hash (no rainbow tables)', () {
+      final a = AuthHelper.hashPassword('same', AuthHelper.newSalt());
+      final b = AuthHelper.hashPassword('same', AuthHelper.newSalt());
+      expect(a == b, isFalse);
+    });
+
+    test('verification accepts the right password and rejects others', () {
+      final salt = AuthHelper.newSalt();
+      final hash = AuthHelper.hashPassword('caisse123', salt);
+      expect(AuthHelper.verifyPassword('caisse123', salt, hash), isTrue);
+      expect(AuthHelper.verifyPassword('caisse124', salt, hash), isFalse);
+      expect(AuthHelper.verifyPassword('caisse123', salt, ''), isFalse);
+    });
+
+    test('identifier validation accepts e-mails and plain usernames', () {
+      expect(AuthHelper.isValidEmail('karim@shop.dz'), isTrue);
+      expect(AuthHelper.isValidEmail('Karim'), isTrue);
+      expect(AuthHelper.isValidEmail('karim ben'), isFalse);
+      expect(AuthHelper.isValidEmail('karim@'), isFalse);
+      expect(AuthHelper.normalizeEmail('  Karim@Shop.DZ '), 'karim@shop.dz');
+    });
+
+    test('password rules and strength meter', () {
+      expect(AuthHelper.isValidPassword('12345'), isFalse);
+      expect(AuthHelper.isValidPassword('123456'), isTrue);
+      expect(AuthHelper.strength('123'), 0);
+      expect(AuthHelper.strength('abcdef'), 1);
+      expect(AuthHelper.strength('abc12345!@'), 3);
+    });
+  });
+
+  group('Role permissions', () {
+    test('admin can do everything', () {
+      const role = UserRole.admin;
+      expect(role.canViewReports, isTrue);
+      expect(role.canChangeSettings, isTrue);
+      expect(role.canManageUsers, isTrue);
+      expect(role.canManageInventory, isTrue);
+    });
+
+    test('accountant sees money but not settings', () {
+      const role = UserRole.accountant;
+      expect(role.canViewReports, isTrue);
+      expect(role.canManageExpenses, isTrue);
+      expect(role.canChangeSettings, isFalse);
+      expect(role.canManageUsers, isFalse);
+      expect(role.canManageInventory, isFalse);
+    });
+
+    test('stock keeper handles goods, not profits', () {
+      const role = UserRole.stockkeeper;
+      expect(role.canManageProducts, isTrue);
+      expect(role.canManageInventory, isTrue);
+      expect(role.canViewReports, isFalse);
+      expect(role.canManageCustomers, isFalse);
+    });
+
+    test('cashier can only sell', () {
+      const role = UserRole.cashier;
+      expect(role.canSell, isTrue);
+      expect(role.canManageCustomers, isTrue);
+      expect(role.canViewReports, isFalse);
+      expect(role.canManageProducts, isFalse);
+      expect(role.canChangeSettings, isFalse);
+    });
+
+    test('user maps keep the account fields', () {
+      final user = AppUser(
+        id: 'u1',
+        name: 'Karim Ben',
+        email: 'karim@shop.dz',
+        role: UserRole.accountant,
+        pinHash: '',
+        salt: '',
+        passwordHash: 'hash',
+        passwordSalt: 'salt',
+        createdAt: DateTime(2026, 1, 1),
+      );
+      final copy = AppUser.fromMap(user.toMap());
+      expect(copy.email, 'karim@shop.dz');
+      expect(copy.role, UserRole.accountant);
+      expect(copy.hasPassword, isTrue);
+      expect(copy.hasPin, isFalse);
+      expect(copy.initials, 'KB');
+      expect(copy.active, isTrue);
     });
   });
 }

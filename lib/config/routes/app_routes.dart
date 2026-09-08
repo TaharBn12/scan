@@ -21,6 +21,9 @@ import '../../features/customers/presentation/pages/debts_page.dart';
 import '../../features/inventory/presentation/pages/stock_take_page.dart';
 import '../../features/search/presentation/pages/search_page.dart';
 import '../../features/shifts/presentation/pages/shift_page.dart';
+import '../../features/users/domain/entities/app_user.dart';
+import '../../features/users/presentation/pages/login_page.dart';
+import '../../features/users/presentation/pages/user_form_page.dart';
 import '../../features/sales/presentation/pages/invoice_page.dart';
 import '../../features/expenses/presentation/pages/expenses_page.dart';
 import '../../features/inventory/presentation/pages/purchases_page.dart';
@@ -32,31 +35,24 @@ import '../../features/users/presentation/pages/lock_page.dart';
 
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
-const _adminOnlyPrefixes = [
-  '/products/add',
-  '/products/edit',
-  '/products/low-stock',
-  '/reports',
-  '/settings',
-  '/shop',
-  '/expenses',
-  '/inventory',
-  '/labels',
-  '/users',
-];
 
 final router = GoRouter(
   initialLocation: '/menu',
   refreshListenable: sessionController,
   redirect: (context, state) {
     final location = state.uri.path;
-    final locked = sessionController.needsUnlock;
-    if (locked) return location == '/lock' ? null : '/lock';
-    if (location == '/lock') return '/menu';
-    if (!sessionController.isAdmin &&
-        _adminOnlyPrefixes.any((p) => location.startsWith(p))) {
-      return '/menu';
+    const authRoutes = ['/login', '/lock'];
+
+    // Signed out: accounts go to the login screen, a plain app PIN to the
+    // pad. Both may hop between each other (PIN tab / password tab).
+    if (sessionController.needsUnlock) {
+      if (authRoutes.contains(location)) return null;
+      return sessionController.isMultiUser ? '/login' : '/lock';
     }
+    if (authRoutes.contains(location)) return '/menu';
+
+    // Signed in: every screen checks the role's permissions.
+    if (!sessionController.canOpen(location)) return '/menu';
     return null;
   },
   routes: [
@@ -93,6 +89,10 @@ final router = GoRouter(
           },
         ),
       ],
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginPage(),
     ),
     GoRoute(
       path: '/shift',
@@ -191,6 +191,13 @@ final router = GoRouter(
     GoRoute(
       path: '/users',
       builder: (context, state) => const UsersPage(),
+      routes: [
+        GoRoute(
+          path: 'form',
+          builder: (context, state) =>
+              UserFormPage(existing: state.extra as AppUser?),
+        ),
+      ],
     ),
     GoRoute(
       path: '/customers',

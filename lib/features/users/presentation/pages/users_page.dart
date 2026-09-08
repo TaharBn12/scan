@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/l10n/app_localizations.dart';
@@ -7,6 +6,7 @@ import '../../../../core/security/session_controller.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../domain/entities/app_user.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widgets/ui_kit.dart';
 
 /// Manage cashiers / managers. When multi-user mode is switched on, the app
 /// asks "who is working?" at start-up and each user signs in with a PIN.
@@ -46,113 +46,8 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   Future<void> _openForm({AppUser? existing}) async {
-    final l10n = context.l10n;
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final pinCtrl = TextEditingController();
-    UserRole role = existing?.role ?? UserRole.cashier;
-    final formKey = GlobalKey<FormState>();
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(existing == null ? l10n.t('add_user') : l10n.t('edit_user')),
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  controller: nameCtrl,
-                  autofocus: existing == null,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: InputDecoration(
-                    labelText: l10n.t('user_name'),
-                    border: const OutlineInputBorder(),
-                  ),
-                  validator: (v) => (v == null || v.trim().isEmpty)
-                      ? l10n.t('required_field')
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: pinCtrl,
-                  keyboardType: TextInputType.number,
-                  obscureText: true,
-                  maxLength: 6,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: InputDecoration(
-                    labelText: l10n.t('user_pin'),
-                    helperText: existing == null ? null : l10n.t('optional'),
-                    border: const OutlineInputBorder(),
-                    counterText: '',
-                  ),
-                  validator: (v) {
-                    final pin = (v ?? '').trim();
-                    if (pin.isEmpty) {
-                      return existing == null ? l10n.t('pin_too_short') : null;
-                    }
-                    if (pin.length < 4 || pin.length > 6) {
-                      return l10n.t('pin_too_short');
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 12),
-                SegmentedButton<UserRole>(
-                  segments: [
-                    for (final r in UserRole.values)
-                      ButtonSegment(
-                        value: r,
-                        icon: Icon(r == UserRole.admin
-                            ? Icons.admin_panel_settings_outlined
-                            : Icons.point_of_sale_outlined),
-                        label: Text(l10n.t(r.labelKey)),
-                      ),
-                  ],
-                  selected: {role},
-                  onSelectionChanged: (s) =>
-                      setDialogState(() => role = s.first),
-                ),
-                const SizedBox(height: 8),
-                Text(l10n.t('admin_only_hint'),
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).textTheme.bodySmall?.color)),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialog, false),
-                child: Text(l10n.cancel)),
-            FilledButton(
-              onPressed: () async {
-                if (formKey.currentState?.validate() != true) return;
-                final result = await _repo.saveUser(
-                  id: existing?.id,
-                  name: nameCtrl.text,
-                  role: role,
-                  pin: pinCtrl.text.trim().isEmpty ? null : pinCtrl.text.trim(),
-                );
-                if (!context.mounted) return;
-                result.fold(
-                  (f) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(l10n.t(f.message)),
-                      backgroundColor: AppTheme.danger)),
-                  (_) => Navigator.pop(dialog, true),
-                );
-              },
-              child: Text(l10n.save),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (saved == true && mounted) {
-      _snack(l10n.t('user_saved'), color: AppTheme.success);
-      await _load();
-    }
+    final saved = await context.push<bool>('/users/form', extra: existing);
+    if (saved == true && mounted) await _load();
   }
 
   Future<void> _delete(AppUser u) async {
@@ -184,16 +79,18 @@ class _UsersPageState extends State<UsersPage> {
 
   Future<void> _toggleMultiUser(bool enabled) async {
     final l10n = context.l10n;
-    if (enabled && !_users.any((u) => u.isAdmin)) {
-      _snack(l10n.t('cannot_delete_last_admin'), color: AppTheme.danger);
+    if (enabled && !_users.any((u) => u.isAdmin && (u.hasPassword || u.hasPin))) {
+      // Without a usable admin account the owner would lock themselves out.
+      _snack(l10n.t('need_admin_account'), color: AppTheme.danger);
       return;
     }
     await sessionController.setMultiUser(enabled);
     if (!mounted) return;
     setState(() {});
     if (enabled) {
-      // Force the "who is working?" screen right away.
+      // Force the sign-in screen right away.
       await sessionController.lock();
+      if (mounted) context.go('/login');
     }
   }
 
@@ -267,21 +164,61 @@ class _UsersPageState extends State<UsersPage> {
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: u.isAdmin
-                              ? theme.colorScheme.primaryContainer
-                              : theme.colorScheme.secondaryContainer,
-                          child: Icon(
-                            u.isAdmin
-                                ? Icons.admin_panel_settings_outlined
-                                : Icons.point_of_sale_outlined,
-                            color: u.isAdmin
-                                ? theme.colorScheme.onPrimaryContainer
-                                : theme.colorScheme.onSecondaryContainer,
+                          backgroundColor: _RoleStyle.colorFor(u.role)
+                              .withValues(alpha: 0.15),
+                          child: Text(
+                            u.initials,
+                            style: TextStyle(
+                                color: _RoleStyle.colorFor(u.role),
+                                fontWeight: FontWeight.bold),
                           ),
                         ),
-                        title: Text(u.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text(l10n.t(u.role.labelKey)),
+                        title: Row(
+                          children: [
+                            Flexible(
+                              child: Text(u.name,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                            if (!u.active) ...[
+                              const SizedBox(width: 6),
+                              AppBadge(
+                                  text: l10n.t('disabled'),
+                                  color: AppTheme.danger),
+                            ],
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${l10n.t(u.role.labelKey)}'
+                              '${u.email.isEmpty ? '' : ' · ${u.email}'}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                if (u.hasPassword)
+                                  Padding(
+                                    padding:
+                                        const EdgeInsetsDirectional.only(end: 6),
+                                    child: AppBadge(
+                                        text: l10n.t('password'),
+                                        color: _RoleStyle.colorFor(u.role),
+                                        icon: Icons.lock_outline),
+                                  ),
+                                if (u.hasPin)
+                                  AppBadge(
+                                      text: l10n.t('user_pin'),
+                                      color: AppTheme.info,
+                                      icon: Icons.dialpad_rounded),
+                              ],
+                            ),
+                          ],
+                        ),
                         trailing: PopupMenuButton<String>(
                           onSelected: (v) {
                             if (v == 'edit') _openForm(existing: u);
@@ -317,4 +254,16 @@ class _UsersPageState extends State<UsersPage> {
             ),
     );
   }
+}
+
+/// Colour per role, shared by the avatar and the badges.
+class _RoleStyle {
+  const _RoleStyle._();
+
+  static Color colorFor(UserRole role) => switch (role) {
+        UserRole.admin => const Color(0xFF7C3AED),
+        UserRole.accountant => AppTheme.info,
+        UserRole.stockkeeper => AppTheme.warning,
+        UserRole.cashier => AppTheme.success,
+      };
 }

@@ -114,7 +114,15 @@ class _LockPageState extends State<LockPage> {
                   onSubmit: _submit,
                   enabled: _failures < 5,
                 ),
-                const SizedBox(height: 32),
+                if (multi)
+                  TextButton.icon(
+                    onPressed: () => context.go('/login'),
+                    icon: const Icon(Icons.password_rounded,
+                        size: 18, color: Colors.white),
+                    label: Text(l10n.t('sign_in'),
+                        style: const TextStyle(color: Colors.white)),
+                  ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

@@ -26,6 +26,10 @@ class MenuPage extends StatelessWidget {
       listenable: sessionController,
       builder: (context, _) {
         final isAdmin = sessionController.isAdmin;
+        final canSeeMoney = sessionController.canViewReports;
+        final canStock = sessionController.canManageProducts;
+        final canExpenses = sessionController.canManageExpenses;
+        final canCustomers = sessionController.canManageCustomers;
         return Scaffold(
           body: RefreshIndicator(
             onRefresh: () async {
@@ -44,7 +48,7 @@ class MenuPage extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 18, 16, 36),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate([
-                    if (isAdmin) ...[
+                    if (canSeeMoney) ...[
                       const _KpiGrid(),
                       const SizedBox(height: 16),
                       const _TrendCard(),
@@ -66,7 +70,8 @@ class MenuPage extends StatelessWidget {
                         color: AppTheme.success,
                         onTap: () => context.push('/no-barcode'),
                       ),
-                      _ActionCard(
+                      if (canCustomers)
+                        _ActionCard(
                         icon: Icons.people_alt_rounded,
                         label: l10n.customers,
                         subtitle: l10n.crmAndCredit,
@@ -101,32 +106,36 @@ class MenuPage extends StatelessWidget {
                         onTap: () => context.push('/search'),
                       ),
                     ]),
-                    if (isAdmin) ...[
+                    if (canSeeMoney || canStock || isAdmin) ...[
                       const SizedBox(height: 24),
                       SectionHeader(title: l10n.manage),
                       _ActionGrid(children: [
-                        _ActionCard(
+                        if (canSeeMoney)
+                          _ActionCard(
                           icon: Icons.insights_rounded,
                           label: l10n.reports,
                           subtitle: l10n.salesAndProfit,
                           color: const Color(0xFF6366F1),
                           onTap: () => context.push('/reports'),
                         ),
-                        _ActionCard(
+                        if (canExpenses)
+                          _ActionCard(
                           icon: Icons.receipt_long_rounded,
                           label: l10n.expenses,
                           subtitle: l10n.expensesSubtitle,
                           color: const Color(0xFFEF4444),
                           onTap: () => context.push('/expenses'),
                         ),
-                        _ActionCard(
+                        if (sessionController.canManageInventory)
+                          _ActionCard(
                           icon: Icons.local_shipping_rounded,
                           label: l10n.purchases,
                           subtitle: l10n.purchasesSubtitle,
                           color: const Color(0xFF0EA5E9),
                           onTap: () => context.push('/inventory'),
                         ),
-                        BlocBuilder<ProductBloc, ProductState>(
+                        if (canStock)
+                          BlocBuilder<ProductBloc, ProductState>(
                           builder: (context, state) => _ActionCard(
                             icon: Icons.warning_amber_rounded,
                             label: l10n.lowStock,
@@ -136,21 +145,24 @@ class MenuPage extends StatelessWidget {
                             onTap: () => context.push('/products/low-stock'),
                           ),
                         ),
-                        _ActionCard(
+                        if (canStock)
+                          _ActionCard(
                           icon: Icons.qr_code_2_rounded,
                           label: l10n.labels,
                           subtitle: l10n.labelsSubtitle,
                           color: const Color(0xFF14B8A6),
                           onTap: () => context.push('/labels'),
                         ),
-                        _ActionCard(
+                        if (sessionController.canManageInventory)
+                          _ActionCard(
                           icon: Icons.fact_check_rounded,
                           label: l10n.t('stock_take'),
                           subtitle: l10n.t('stock_take_subtitle'),
                           color: const Color(0xFF0891B2),
                           onTap: () => context.push('/inventory/stocktake'),
                         ),
-                        BlocBuilder<SaleBloc, SaleState>(
+                        if (canCustomers)
+                          BlocBuilder<SaleBloc, SaleState>(
                           builder: (context, state) => _ActionCard(
                             icon: Icons.notifications_active_rounded,
                             label: l10n.t('debt_followup'),
@@ -162,7 +174,8 @@ class MenuPage extends StatelessWidget {
                             onTap: () => context.push('/customers/debts'),
                           ),
                         ),
-                        _ActionCard(
+                        if (isAdmin)
+                          _ActionCard(
                           icon: Icons.storefront_rounded,
                           label: l10n.shopDetails,
                           subtitle: l10n.businessInfo,
