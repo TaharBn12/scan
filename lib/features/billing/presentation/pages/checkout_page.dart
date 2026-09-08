@@ -16,6 +16,7 @@ import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
+import '../../../../core/utils/cash_change.dart';
 import '../../../../core/utils/money.dart';
 import '../bloc/billing_bloc.dart';
 
@@ -231,7 +232,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             _buildInitialPaymentSection(context, billingState),
                           const SizedBox(height: 16),
                           _buildNoteSection(context),
-                          const SizedBox(height: 120),
+                          const SizedBox(height: 16),
+                          _buildMarginGuard(context, billingState),
+                          const SizedBox(height: 104),
                         ],
                       ),
                     ),
@@ -533,6 +536,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ),
               ],
             ),
+            if (change > 0) _buildChangeBreakdown(context, change),
           ],
         ],
       ),
@@ -710,6 +714,146 @@ class _CheckoutPageState extends State<CheckoutPage> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// Exactly which notes and coins to hand back — no mental arithmetic
+  /// during a rush.
+  Widget _buildChangeBreakdown(BuildContext context, double change) {
+    final l10n = context.l10n;
+    final parts = CashChange.breakdown(change);
+    if (parts.isEmpty) return const SizedBox.shrink();
+    final leftover = CashChange.remainder(change);
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.savings_outlined,
+                  size: 15, color: context.mutedColor),
+              const SizedBox(width: 6),
+              Text(l10n.t('change_breakdown'),
+                  style: TextStyle(fontSize: 12, color: context.mutedColor)),
+              const Spacer(),
+              Text(
+                  l10n.t('change_pieces',
+                      {'count': CashChange.pieceCount(parts)}),
+                  style: TextStyle(fontSize: 11, color: context.mutedColor)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final part in parts)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                        color: AppTheme.success.withValues(alpha: 0.30)),
+                  ),
+                  child: Text(
+                    '${part.count} × ${Money.format(part.value.toDouble())}',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.success),
+                  ),
+                ),
+            ],
+          ),
+          if (leftover > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              l10n.t('change_remainder', {'amount': Money.format(leftover)}),
+              style: const TextStyle(fontSize: 11, color: AppTheme.warning),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Live margin guard: shows the profit this invoice will make and shouts
+  /// when a discount (or an edited price) pushes it under the cost price.
+  Widget _buildMarginGuard(BuildContext context, BillingState state) {
+    if (!sessionController.isAdmin || state.cartItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final l10n = context.l10n;
+    double revenue = 0;
+    double cost = 0;
+    bool missingCost = false;
+    for (final item in state.cartItems) {
+      revenue += item.total;
+      if (item.product.costPrice <= 0) {
+        missingCost = true;
+      } else {
+        cost += item.product.costPrice * item.quantity;
+      }
+    }
+    if (cost <= 0) return const SizedBox.shrink();
+
+    final profit = state.totalAmount - cost;
+    final margin = state.totalAmount <= 0 ? 0.0 : (profit / state.totalAmount) * 100;
+    final atLoss = profit < -0.005;
+    final color = atLoss
+        ? AppTheme.danger
+        : (margin < 5 ? AppTheme.warning : AppTheme.success);
+    // Silent when the discount is negligible and the margin is healthy.
+    if (!atLoss && margin >= 5 && state.discountAmount <= 0) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: AppTheme.brMd,
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(atLoss ? Icons.trending_down_rounded : Icons.insights_rounded,
+                color: color, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    atLoss
+                        ? l10n.t('selling_at_loss',
+                            {'amount': Money.format(profit.abs())})
+                        : '${l10n.t('expected_profit')}: ${Money.format(profit)}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: color),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      l10n.t('margin_percent',
+                          {'percent': margin.toStringAsFixed(1)}),
+                      if (missingCost) l10n.t('cost_unknown'),
+                    ].join(' · '),
+                    style:
+                        TextStyle(fontSize: 11, color: context.mutedColor),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

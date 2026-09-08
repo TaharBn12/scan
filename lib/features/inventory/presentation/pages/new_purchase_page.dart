@@ -17,6 +17,7 @@ import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/purchase.dart';
 import '../bloc/inventory_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Stock-in screen: pick products (search or scan), enter quantity received
 /// and unit cost, then "Receive" adds everything to stock in one go.
@@ -533,9 +534,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                 builder: (context, state) {
                   final items = state.products.where((p) {
                     if (_query.isEmpty) return true;
-                    return p.name.toLowerCase().contains(_query) ||
-                        p.barcode.contains(_query) ||
-                        p.category.toLowerCase().contains(_query);
+                    return SearchText.matchesAny(
+                        [p.name, p.barcode, p.category], _query);
                   }).toList()
                     ..sort((a, b) =>
                         a.name.toLowerCase().compareTo(b.name.toLowerCase()));

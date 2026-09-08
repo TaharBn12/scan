@@ -11,6 +11,7 @@ import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Barcode label sheets. Select products, choose layout, export an A4 PDF
 /// (print it anywhere / share it) or push single stickers to the thermal
@@ -46,9 +47,7 @@ class _LabelsPageState extends State<LabelsPage> {
     final list = all.where((p) {
       if (_onlyWithBarcode && p.barcode.trim().isEmpty) return false;
       if (q.isEmpty) return true;
-      return p.name.toLowerCase().contains(q) ||
-          p.barcode.contains(q) ||
-          p.category.toLowerCase().contains(q);
+      return SearchText.matchesAny([p.name, p.barcode, p.category], q);
     }).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return list;

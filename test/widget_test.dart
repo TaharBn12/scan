@@ -3,7 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:billing_app/core/l10n/strings_ar.dart';
 import 'package:billing_app/core/l10n/strings_en.dart';
 import 'package:billing_app/core/l10n/strings_fr.dart';
+import 'package:billing_app/core/utils/cash_change.dart';
+import 'package:billing_app/core/utils/search_text.dart';
 import 'package:billing_app/features/billing/data/held_cart_store.dart';
+import 'package:billing_app/features/product/domain/reorder_advisor.dart';
 import 'package:billing_app/features/billing/domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/sales/domain/entities/sale.dart';
@@ -144,6 +147,124 @@ void main() {
       expect(copy.lines.length, 2);
       expect(copy.lines.first.total, 240);
       expect(copy.createdAt, DateTime(2026, 3, 4, 10, 30));
+    });
+  });
+
+  group('Smart cross-script search', () {
+    test('finds Arabic products typed in Latin letters', () {
+      expect(SearchText.matches('حليب رائب', 'hlib'), isTrue);
+      expect(SearchText.matches('حليب رائب', 'halib'), isTrue);
+      expect(SearchText.matches('سكر', 'sukkar'), isTrue);
+      expect(SearchText.matches('قهوة', 'kahwa'), isTrue);
+      expect(SearchText.matches('شوكولاطة', 'chocolat'), isTrue);
+      expect(SearchText.matches('دانون', 'danone'), isTrue);
+    });
+
+    test('understands Arabizi digits', () {
+      expect(SearchText.matches('قهوة', '9ahwa'), isTrue);
+      expect(SearchText.matches('حليب', '7lib'), isTrue);
+      expect(SearchText.matches('خبز', '5obz'), isTrue);
+    });
+
+    test('still does plain and accent-insensitive matching', () {
+      expect(SearchText.matches('Café Noir', 'cafe'), isTrue);
+      expect(SearchText.matches('حليب', 'حلي'), isTrue);
+      expect(SearchText.matches('6133456789012', '61334'), isTrue);
+    });
+
+    test('does not match unrelated words', () {
+      expect(SearchText.matches('حليب', 'zit'), isFalse);
+      expect(SearchText.matches('سكر', 'farine'), isFalse);
+    });
+
+    test('an empty query matches everything', () {
+      expect(SearchText.matches('أي منتج', '  '), isTrue);
+      expect(SearchText.matchesAny(['a', null], ''), isTrue);
+    });
+  });
+
+  group('Cash change breakdown', () {
+    test('uses the largest Algerian notes first', () {
+      final parts = CashChange.breakdown(3750, denominations: CashChange.dzd);
+      expect(parts.first, const CashPart(2000, 1));
+      expect(parts, contains(const CashPart(1000, 1)));
+      expect(parts, contains(const CashPart(500, 1)));
+      expect(parts, contains(const CashPart(200, 1)));
+      expect(parts, contains(const CashPart(50, 1)));
+      expect(parts.fold<int>(0, (sum, p) => sum + p.total), 3750);
+    });
+
+    test('reports what no coin can cover', () {
+      expect(CashChange.remainder(1003, denominations: CashChange.dzd), 3);
+      expect(CashChange.remainder(1000, denominations: CashChange.dzd), 0);
+    });
+
+    test('nothing to give back for zero change', () {
+      expect(CashChange.breakdown(0, denominations: CashChange.dzd), isEmpty);
+      expect(CashChange.pieceCount(
+          CashChange.breakdown(300, denominations: CashChange.dzd)), 2);
+    });
+  });
+
+  group('Reorder advisor', () {
+    Sale saleOf(String productId, double qty, DateTime when) => Sale(
+          id: 's-${when.millisecondsSinceEpoch}',
+          dateTime: when,
+          items: [
+            SaleItem(
+                productId: productId,
+                productName: 'X',
+                unitPrice: 100,
+                quantity: qty),
+          ],
+          subtotal: 100 * qty,
+          discountAmount: 0,
+          total: 100 * qty,
+          paymentMethod: PaymentMethod.cash,
+        );
+
+    test('computes the daily pace, days of cover and order size', () {
+      final now = DateTime(2026, 6, 30);
+      const product = Product(
+          id: 'p1', name: 'Milk', barcode: '1', price: 100, stock: 6);
+      final sales = [
+        for (int i = 0; i < 10; i++)
+          saleOf('p1', 2, now.subtract(Duration(days: i))),
+      ];
+      final advice = ReorderAdvisor.advise(product, sales, now: now);
+      expect(advice.dailyRate, closeTo(2, 0.35));
+      expect(advice.daysOfCover, isNotNull);
+      expect(advice.daysOfCover!, closeTo(3, 0.6));
+      expect(advice.isUrgent, isFalse);
+      // ~2/day * 14 days of cover - 6 in stock
+      expect(advice.suggestedQuantity, greaterThan(18));
+    });
+
+    test('flags a product about to run out', () {
+      final now = DateTime(2026, 6, 30);
+      const product = Product(
+          id: 'p2', name: 'Bread', barcode: '2', price: 20, stock: 4);
+      final sales = [
+        for (int i = 0; i < 7; i++)
+          saleOf('p2', 5, now.subtract(Duration(days: i))),
+      ];
+      final advice = ReorderAdvisor.advise(product, sales, now: now);
+      expect(advice.isUrgent, isTrue);
+    });
+
+    test('falls back to the threshold when nothing ever sold', () {
+      final now = DateTime(2026, 6, 30);
+      const product = Product(
+          id: 'p3',
+          name: 'Dust',
+          barcode: '3',
+          price: 10,
+          stock: 1,
+          lowStockThreshold: 5);
+      final advice = ReorderAdvisor.advise(product, const [], now: now);
+      expect(advice.sellsRegularly, isFalse);
+      expect(advice.daysOfCover, isNull);
+      expect(advice.suggestedQuantity, 9); // 5*2 - 1
     });
   });
 }

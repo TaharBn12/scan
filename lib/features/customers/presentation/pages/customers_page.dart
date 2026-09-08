@@ -9,6 +9,7 @@ import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Lists saved customers.
 ///
@@ -140,8 +141,8 @@ class _CustomersPageState extends State<CustomersPage> {
                     return false;
                   }
                   if (_searchQuery.isEmpty) return true;
-                  return c.name.toLowerCase().contains(_searchQuery) ||
-                      c.phone.toLowerCase().contains(_searchQuery);
+                  return SearchText.matchesAny(
+                      [c.name, c.phone, c.address], _searchQuery);
                 }).toList()
                   ..sort((a, b) =>
                       a.name.toLowerCase().compareTo(b.name.toLowerCase()));

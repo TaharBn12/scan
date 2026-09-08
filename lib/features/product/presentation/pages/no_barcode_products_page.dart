@@ -10,6 +10,7 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../billing/presentation/bloc/billing_bloc.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Lists products that were added without a barcode (loose / manual items).
 ///
@@ -140,7 +141,8 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
 
                 final noBarcodeProducts = state.products
                     .where((p) => !p.hasBarcode)
-                    .where((p) => p.name.toLowerCase().contains(_searchQuery))
+                    .where((p) =>
+                        SearchText.matchesAny([p.name, p.category], _searchQuery))
                     .toList();
 
                 if (noBarcodeProducts.isEmpty) {

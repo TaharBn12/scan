@@ -6,6 +6,7 @@ import 'package:intl/intl.dart' show DateFormat;
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/utils/search_text.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../billing/presentation/bloc/billing_bloc.dart';
 import '../../../customers/domain/entities/customer.dart';
@@ -47,10 +48,8 @@ class _SearchPageState extends State<SearchPage> {
             .watch<ProductBloc>()
             .state
             .products
-            .where((p) =>
-                p.name.toLowerCase().contains(q) ||
-                (p.hasBarcode && p.barcode.toLowerCase().contains(q)) ||
-                p.category.toLowerCase().contains(q))
+            .where((p) => SearchText.matchesAny(
+                [p.name, if (p.hasBarcode) p.barcode, p.category], q))
             .take(8)
             .toList();
 
@@ -60,9 +59,7 @@ class _SearchPageState extends State<SearchPage> {
             .watch<CustomerBloc>()
             .state
             .customers
-            .where((c) =>
-                c.name.toLowerCase().contains(q) ||
-                c.phone.toLowerCase().contains(q))
+            .where((c) => SearchText.matchesAny([c.name, c.phone], q))
             .take(6)
             .toList();
 
@@ -70,10 +67,9 @@ class _SearchPageState extends State<SearchPage> {
         ? <Sale>[]
         : (context.watch<SaleBloc>().state.sales
             .where((s) =>
-                s.number.toString() == q ||
                 s.number.toString().contains(q) ||
-                (s.customerName ?? '').toLowerCase().contains(q) ||
-                s.items.any((i) => i.productName.toLowerCase().contains(q)))
+                SearchText.matches(s.customerName ?? '', q) ||
+                s.items.any((i) => SearchText.matches(i.productName, q)))
             .take(6)
             .toList());
 
@@ -109,6 +105,23 @@ class _SearchPageState extends State<SearchPage> {
                       ),
               ),
               onChanged: (v) => setState(() => _query = v),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsetsDirectional.only(
+                start: 22, end: 22, bottom: 8),
+            child: Row(
+              children: [
+                Icon(Icons.keyboard_alt_outlined,
+                    size: 13, color: context.mutedColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    l10n.t('smart_search_hint'),
+                    style: TextStyle(fontSize: 11, color: context.mutedColor),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(

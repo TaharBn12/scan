@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../domain/entities/product.dart';
 import '../bloc/product_bloc.dart';
+import '../../../../core/utils/search_text.dart';
 
 enum _SortMode { name, price, stock }
 
@@ -89,8 +90,7 @@ class _ProductListPageState extends State<ProductListPage> {
   List<Product> _apply(List<Product> products) {
     final filtered = products
         .where((p) =>
-            p.name.toLowerCase().contains(_searchQuery) ||
-            p.barcode.toLowerCase().contains(_searchQuery))
+            SearchText.matchesAny([p.name, p.barcode, p.category], _searchQuery))
         .where((p) => _selectedCategory == null || p.category == _selectedCategory)
         .toList();
     switch (_sort) {
