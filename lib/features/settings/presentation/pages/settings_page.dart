@@ -25,6 +25,7 @@ import '../../../inventory/presentation/bloc/inventory_bloc.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
+import '../../../users/domain/entities/app_user.dart';
 import '../bloc/printer_bloc.dart';
 import '../bloc/printer_event.dart';
 import '../bloc/printer_state.dart';
