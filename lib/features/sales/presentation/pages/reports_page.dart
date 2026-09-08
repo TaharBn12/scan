@@ -538,7 +538,7 @@ class _OverviewTab extends StatelessWidget {
         _StatTile(
           label: l10n.t('net_profit'),
           value: Money.format(net),
-          color: net >= 0 ? const Color(0xFF00B894) : AppTheme.danger,
+          color: net >= 0 ? AppTheme.success : AppTheme.danger,
           icon: Icons.account_balance_wallet_outlined,
           big: true,
           subtitle: l10n.t('profit_label'),
@@ -602,7 +602,7 @@ class _OverviewTab extends StatelessWidget {
           entries: state.paymentBreakdown.entries
               .map((e) => MapEntry(l10n.t(e.key.labelKey), e.value))
               .toList(),
-          colors: const [Color(0xFF00B894), Color(0xFFE17055)],
+          colors: const [AppTheme.success, AppTheme.warning],
         ),
         if (state.byCashier.length > 1) ...[
           const SizedBox(height: 22),
@@ -710,13 +710,13 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: AppTheme.brMd,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.18)),
+          color: color.withValues(alpha: 0.09),
+          borderRadius: AppTheme.brMd,
+          border: Border.all(color: color.withValues(alpha: 0.22)),
         ),
         child: Row(
           children: [
@@ -771,9 +771,10 @@ class _BarChart extends StatelessWidget {
       height: 170,
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
       decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.4)),
+        color: theme.colorScheme.surface,
+        borderRadius: AppTheme.brMd,
+        border: Border.all(color: context.borderColor),
+        boxShadow: AppTheme.shadow(theme.brightness),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
