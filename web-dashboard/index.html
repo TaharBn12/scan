@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>لوحة المتجر · POS Cloud</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">🛒</div>
+      <div class="brand-text">
+        <h1 id="shopName">لوحة المتجر</h1>
+        <div class="sub">
+          <span id="liveDot" class="dot" aria-hidden="true"></span>
+          <span id="liveText">جارٍ الاتصال…</span>
+        </div>
+      </div>
+    </div>
+    <div class="top-meta">
+      <span id="updatedAt" class="updated"></span>
+    </div>
+  </header>
+
+  <div id="setupBanner" class="banner hidden">
+    <b>اللوحة غير مهيّأة بعد:</b> ضع إعدادات مشروع Firebase في الملف
+    <code dir="ltr">firebase-config.js</code>
+    (نفس المشروع الذي تزامنه التطبيق في الإعدادات ← المزامنة السحابية).
+  </div>
+  <div id="errorBanner" class="banner error hidden"></div>
+
+  <main>
+    <section class="kpis" aria-label="ملخص اليوم">
+      <div class="kpi">
+        <div class="kpi-label">مبيعات اليوم</div>
+        <div class="kpi-value" id="kpiRevenue">—</div>
+        <div class="kpi-sub" id="kpiRevenueSub"></div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">فواتير اليوم</div>
+        <div class="kpi-value" id="kpiOrders">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">ربح اليوم (تقديري)</div>
+        <div class="kpi-value" id="kpiProfit">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">مصاريف اليوم</div>
+        <div class="kpi-value" id="kpiExpenses">—</div>
+      </div>
+      <div class="kpi warn">
+        <div class="kpi-label">نواقص المخزون</div>
+        <div class="kpi-value" id="kpiLowStock">—</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>مبيعات اليوم</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الوقت</th>
+              <th>رقم</th>
+              <th>المنتجات</th>
+              <th>المجموع</th>
+              <th>الدفع</th>
+              <th>الحالة</th>
+              <th>البائع</th>
+            </tr>
+          </thead>
+          <tbody id="salesBody">
+            <tr><td colspan="7" class="muted">بانتظار البيانات…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="panel">
+        <h2>نواقص المخزون</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>المنتج</th>
+                <th>الباركود</th>
+                <th>الكمية</th>
+                <th>الحد الأدنى</th>
+              </tr>
+            </thead>
+            <tbody id="stockBody">
+              <tr><td colspan="4" class="muted">بانتظار البيانات…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>مصاريف اليوم</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>الوقت</th>
+                <th>البيان</th>
+                <th>الفئة</th>
+                <th>المبلغ</th>
+              </tr>
+            </thead>
+            <tbody id="expensesBody">
+              <tr><td colspan="4" class="muted">بانتظار البيانات…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    لوحة قراءة مباشرة من Cloud Firestore · <span dir="ltr">web-dashboard</span>
+  </footer>
+
+  <script src="firebase-config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

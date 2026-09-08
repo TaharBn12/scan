@@ -387,6 +387,28 @@ const Map<String, String> stringsEn = {
   'sync_pending': '{count} changes waiting to sync',
   'auto_sync': 'Sync automatically',
   'auto_sync_hint': 'Every time a sale is saved (when online)',
+
+  // ---- Cloud sync (Firebase) ----
+  'cloud_sync': 'Cloud Sync',
+  'cloud_sync_hint':
+      'Mirrors your data to your own Firebase project in real time. The web dashboard (web-dashboard) reads the same data in the browser.',
+  'cloud_config_label': 'Firebase Config',
+  'cloud_config_hint':
+      'In the Firebase console: add a web app and copy its config. Cloud Firestore must be enabled for the project.',
+  'cloud_save': 'Save config',
+  'cloud_connected': 'Connected to project {project}',
+  'cloud_config_saved': 'Firebase project linked: {project}',
+  'cloud_config_invalid': 'Invalid config: {error}',
+  'cloud_needs_config': 'Save the Firebase config first.',
+  'cloud_dashboard_url': 'Dashboard URL (optional)',
+  'cloud_open_dashboard': 'Open dashboard',
+  'cloud_last_sync': 'Last cloud sync: {time}',
+  'cloud_sync_now': 'Cloud sync now',
+  'cloud_sync_success': 'Cloud sync complete',
+  'cloud_sync_failed': 'Cloud sync failed: {error}',
+  'cloud_auto_sync': 'Cloud auto-sync',
+  'cloud_auto_sync_hint':
+      'Pushes to Firebase automatically after each sale (when online)',
   'security': 'Security',
   'pin_lock': 'PIN lock',
   'pin_lock_hint': 'Ask for a PIN when the app opens',

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import '../data/hive_database.dart';
+import '../sync/cloud_sync_helper.dart';
 import '../sync/sync_queue.dart';
 import '../../features/product/domain/entities/product.dart';
 
@@ -160,12 +161,24 @@ class SyncHelper {
   // ------------------------------------------------------------ full sync
 
   /// Called after every sale/product change when auto-sync is on. Never
-  /// throws, never blocks the UI (caller doesn't await).
+  /// throws, never blocks the UI (caller doesn't await). Runs every
+  /// channel that is switched on: the merchant website and/or the cloud
+  /// (Firebase) sync — both drain the same outbox.
   static Future<void> autoSync() async {
-    if (!isFullSyncEnabled() || !isAutoSyncEnabled()) return;
-    try {
-      await syncAll();
-    } catch (_) {}
+    final websiteOn = isFullSyncEnabled() && isAutoSyncEnabled();
+    final cloudOn =
+        CloudSyncHelper.isAutoSyncEnabled() && CloudSyncHelper.hasConfig();
+    if (!websiteOn && !cloudOn) return;
+    if (websiteOn) {
+      try {
+        await syncAll();
+      } catch (_) {}
+    }
+    if (cloudOn) {
+      try {
+        await CloudSyncHelper.syncAll();
+      } catch (_) {}
+    }
   }
 
   /// Pushes all queued changes, then pulls product changes from the website.
@@ -207,7 +220,7 @@ class SyncHelper {
           'entity': entity,
           'op': op,
           'id': id,
-          if (op == SyncQueue.opUpsert) 'data': _dataFor(entity, id),
+          if (op == SyncQueue.opUpsert) 'data': dataFor(entity, id),
           'queuedAt': item['queuedAt'],
         });
       }
@@ -236,7 +249,9 @@ class SyncHelper {
     return pushedTotal;
   }
 
-  static Map<String, dynamic>? _dataFor(String entity, String id) {
+  /// Current local map for one outbox record. Public because the cloud
+  /// sync (CloudSyncHelper) pushes the exact same payload to Firestore.
+  static Map<String, dynamic>? dataFor(String entity, String id) {
     switch (entity) {
       case 'product':
         return HiveDatabase.productBox.get(id)?.toMap();
