@@ -555,8 +555,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: p.isLowStock
-                            ? Icon(Icons.warning_amber_rounded,
-                                color: AppTheme.warning.shade700)
+                            ? const Icon(Icons.warning_amber_rounded,
+                                color: AppTheme.warning)
                             : null,
                         onTap: () => Navigator.pop(context, p),
                       );
