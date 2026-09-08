@@ -530,4 +530,60 @@ const Map<String, String> stringsFr = {
   'max_chars': '{count} caractères max',
   'save_details': 'Enregistrer',
   'shop_saved': 'Informations enregistrées',
+
+  // ---- Dashboard 3.0 ----
+  'dashboard': 'Tableau de bord',
+  'welcome_back': 'Bon retour',
+  'quick_actions': 'Actions rapides',
+  'today_profit': "Bénéfice du jour",
+  'invoices_today': 'Factures du jour',
+  'last_7_days': '7 derniers jours',
+  'view_all': 'Tout voir',
+  'avg_ticket_short': 'Panier moyen',
+  'offline_mode': 'Fonctionne hors ligne',
+  'offline_mode_hint': 'Toutes les données restent sur ce téléphone : aucun site, aucun serveur, aucun compte.',
+  'items_in_stock': 'articles en stock',
+  'business_pulse': 'Activité',
+  'no_sales_today': 'Aucune vente aujourd’hui',
+
+  // ---- Global search ----
+  'search_everything': 'Recherche globale',
+  'search_all_hint': 'Produit, client ou numéro de facture…',
+  'no_results': 'Aucun résultat',
+  'start_typing': 'Tapez pour chercher produits, clients et factures',
+  'results_invoices': 'Factures',
+
+  // ---- Held (parked) invoices ----
+  'hold_invoice': 'Mettre en attente',
+  'held_invoices': 'Factures en attente',
+  'held_invoices_hint': 'Mettez le panier de côté, servez un autre client, reprenez plus tard.',
+  'resume': 'Reprendre',
+  'invoice_held': 'Facture mise en attente',
+  'invoice_resumed': 'Facture reprise',
+  'no_held_invoices': 'Aucune facture en attente',
+  'hold_name_hint': 'Nom ou note (optionnel)',
+  'delete_held_confirm': 'Supprimer cette facture en attente ?',
+  'held_count': '{count} en attente',
+  'cart_empty_to_hold': 'Le panier est vide.',
+
+  // ---- Appearance ----
+  'accent_color': 'Couleur d’accent',
+  'accent_indigo': 'Indigo',
+  'accent_emerald': 'Émeraude',
+  'accent_ocean': 'Océan',
+  'accent_sunset': 'Coucher de soleil',
+  'accent_rose': 'Rose',
+  'accent_graphite': 'Graphite',
+  'theme_mode': 'Thème',
+  'compact_mode': 'Affichage compact',
+  'compact_mode_hint': 'Espacements réduits pour afficher plus d’éléments',
+
+  // ---- Weekday short labels (charts) ----
+  'day_mon': 'Lun',
+  'day_tue': 'Mar',
+  'day_wed': 'Mer',
+  'day_thu': 'Jeu',
+  'day_fri': 'Ven',
+  'day_sat': 'Sam',
+  'day_sun': 'Dim',
 };

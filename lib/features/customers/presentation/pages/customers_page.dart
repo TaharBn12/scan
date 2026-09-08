@@ -279,7 +279,7 @@ class _CustomerCard extends StatelessWidget {
               backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
               child: Text(
                 customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
               ),
             ),
@@ -319,7 +319,7 @@ class _CustomerCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.edit_rounded,
+                    icon: Icon(Icons.edit_rounded,
                         color: AppTheme.primaryColor, size: 20),
                     tooltip: l10n.edit,
                     onPressed: () => context.push(

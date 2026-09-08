@@ -37,7 +37,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const _appVersion = '2.0.0';
+  static const _appVersion = '3.0.0';
 
   final TextEditingController _currencyController = TextEditingController();
   bool _backingUp = false;
@@ -429,6 +429,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ]),
               const SizedBox(height: 20),
+              _header(l10n.t('appearance')),
+              _buildAppearance(),
+              const SizedBox(height: 20),
               _header(l10n.t('general')),
               _card(
                 child: Column(
@@ -437,31 +440,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     _label(l10n.t('language')),
                     const SizedBox(height: 8),
                     _LanguagePicker(current: settings.locale),
-                    const SizedBox(height: 18),
-                    _label(l10n.t('appearance')),
-                    const SizedBox(height: 8),
-                    ValueListenableBuilder<ThemeMode>(
-                      valueListenable: themeController,
-                      builder: (context, mode, _) => SegmentedButton<ThemeMode>(
-                        segments: [
-                          ButtonSegment(
-                              value: ThemeMode.light,
-                              label: Text(l10n.t('light')),
-                              icon: const Icon(Icons.light_mode)),
-                          ButtonSegment(
-                              value: ThemeMode.dark,
-                              label: Text(l10n.t('dark')),
-                              icon: const Icon(Icons.dark_mode)),
-                          ButtonSegment(
-                              value: ThemeMode.system,
-                              label: Text(l10n.t('auto')),
-                              icon: const Icon(Icons.brightness_auto)),
-                        ],
-                        selected: {mode},
-                        onSelectionChanged: (s) =>
-                            themeController.setThemeMode(s.first),
-                      ),
-                    ),
                     const SizedBox(height: 18),
                     _label(l10n.t('currency')),
                     const SizedBox(height: 8),
@@ -583,11 +561,17 @@ class _SettingsPageState extends State<SettingsPage> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor,
+                  gradient: Theme.of(context).brightness == Brightness.dark
+                      ? null
+                      : themeController.accent.gradient,
+                  color: Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.28),
                       blurRadius: 15,
                       spreadRadius: 3,
                     )
@@ -634,8 +618,8 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.groups_outlined,
-                      size: 18, color: AppTheme.primaryColor),
+                  Icon(Icons.groups_outlined,
+                      size: 18, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(l10n.t('multi_user_active'),
@@ -946,6 +930,76 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  // ---------------------------------------------------------- appearance
+
+  /// Theme mode + accent colour + density. Everything here is instant:
+  /// [themeController] rebuilds MaterialApp on every change.
+  Widget _buildAppearance() {
+    final l10n = context.l10n;
+    return ValueListenableBuilder<ThemeSettings>(
+      valueListenable: themeController,
+      builder: (context, theme, _) => _card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _label(l10n.t('theme_mode')),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ThemeMode>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                      value: ThemeMode.light,
+                      label: Text(l10n.t('light')),
+                      icon: const Icon(Icons.light_mode_outlined, size: 18)),
+                  ButtonSegment(
+                      value: ThemeMode.dark,
+                      label: Text(l10n.t('dark')),
+                      icon: const Icon(Icons.dark_mode_outlined, size: 18)),
+                  ButtonSegment(
+                      value: ThemeMode.system,
+                      label: Text(l10n.t('auto')),
+                      icon: const Icon(Icons.brightness_auto_outlined,
+                          size: 18)),
+                ],
+                selected: {theme.mode},
+                onSelectionChanged: (s) =>
+                    themeController.setThemeMode(s.first),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _label(l10n.t('accent_color')),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final accent in AppTheme.accents)
+                  _AccentSwatch(
+                    accent: accent,
+                    selected: accent.id == theme.accentId,
+                    label: l10n.t(accent.labelKey),
+                    onTap: () => themeController.setAccent(accent.id),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.t('compact_mode'),
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text(l10n.t('compact_mode_hint'),
+                  style: const TextStyle(fontSize: 11)),
+              value: theme.compact,
+              onChanged: themeController.setCompact,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ------------------------------------------------------------- helpers
 
   Widget _header(String title) => Padding(
@@ -1000,7 +1054,7 @@ class _SettingsPageState extends State<SettingsPage> {
     bool showChevron = true,
   }) =>
       ListTile(
-        leading: Icon(icon, color: AppTheme.primaryColor),
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
         title: Text(title,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: subtitle == null
@@ -1040,6 +1094,69 @@ class _LanguagePicker extends StatelessWidget {
                 appSettings.setLocale(o.key == null ? null : Locale(o.key!)),
           ),
       ],
+    );
+  }
+}
+
+/// A round colour chip used by the accent picker.
+class _AccentSwatch extends StatelessWidget {
+  final AccentPalette accent;
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+
+  const _AccentSwatch({
+    required this.accent,
+    required this.selected,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: accent.gradient,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Colors.transparent,
+                width: 2.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.seed.withValues(alpha: selected ? 0.45 : 0.2),
+                  blurRadius: selected ? 14 : 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: selected
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+                : null,
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 56,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

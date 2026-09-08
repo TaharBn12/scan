@@ -527,4 +527,60 @@ const Map<String, String> stringsEn = {
   'max_chars': 'Max {count} chars',
   'save_details': 'Save details',
   'shop_saved': 'Shop details saved',
+
+  // ---- Dashboard 3.0 ----
+  'dashboard': 'Dashboard',
+  'welcome_back': 'Welcome back',
+  'quick_actions': 'Quick actions',
+  'today_profit': "Today's profit",
+  'invoices_today': "Today's invoices",
+  'last_7_days': 'Last 7 days',
+  'view_all': 'View all',
+  'avg_ticket_short': 'Avg. ticket',
+  'offline_mode': 'Works offline',
+  'offline_mode_hint': 'All data stays on this phone — no website, no server, no account.',
+  'items_in_stock': 'items in stock',
+  'business_pulse': 'Business pulse',
+  'no_sales_today': 'No sales yet today',
+
+  // ---- Global search ----
+  'search_everything': 'Search everything',
+  'search_all_hint': 'Product, customer or invoice number…',
+  'no_results': 'No results',
+  'start_typing': 'Type to search products, customers and invoices',
+  'results_invoices': 'Invoices',
+
+  // ---- Held (parked) invoices ----
+  'hold_invoice': 'Hold invoice',
+  'held_invoices': 'Held invoices',
+  'held_invoices_hint': 'Park the current cart, serve someone else, resume it later.',
+  'resume': 'Resume',
+  'invoice_held': 'Invoice parked',
+  'invoice_resumed': 'Invoice resumed',
+  'no_held_invoices': 'No parked invoices',
+  'hold_name_hint': 'Name or note (optional)',
+  'delete_held_confirm': 'Delete this parked invoice?',
+  'held_count': '{count} on hold',
+  'cart_empty_to_hold': 'The cart is empty.',
+
+  // ---- Appearance ----
+  'accent_color': 'Accent colour',
+  'accent_indigo': 'Indigo',
+  'accent_emerald': 'Emerald',
+  'accent_ocean': 'Ocean',
+  'accent_sunset': 'Sunset',
+  'accent_rose': 'Rose',
+  'accent_graphite': 'Graphite',
+  'theme_mode': 'Theme',
+  'compact_mode': 'Compact layout',
+  'compact_mode_hint': 'Tighter spacing to fit more on screen',
+
+  // ---- Weekday short labels (charts) ----
+  'day_mon': 'Mon',
+  'day_tue': 'Tue',
+  'day_wed': 'Wed',
+  'day_thu': 'Thu',
+  'day_fri': 'Fri',
+  'day_sat': 'Sat',
+  'day_sun': 'Sun',
 };

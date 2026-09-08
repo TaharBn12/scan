@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/theme_controller.dart';
 import '../../../shop/data/repositories/shop_repository_impl.dart';
 
 /// Full-screen PIN pad shown when the app is locked (single PIN) or when a
@@ -72,12 +73,8 @@ class _LockPageState extends State<LockPage> {
       canPop: false,
       child: Scaffold(
         body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [AppTheme.primaryColor, Color(0xFF3F37B5)],
-            ),
+          decoration: BoxDecoration(
+            gradient: themeController.accent.gradient,
           ),
           child: SafeArea(
             child: Column(

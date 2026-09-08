@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:billing_app/core/l10n/strings_ar.dart';
 import 'package:billing_app/core/l10n/strings_en.dart';
 import 'package:billing_app/core/l10n/strings_fr.dart';
+import 'package:billing_app/features/billing/data/held_cart_store.dart';
 import 'package:billing_app/features/billing/domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/sales/domain/entities/sale.dart';
@@ -107,6 +108,42 @@ void main() {
       expect(p.isLowStock, isTrue);
       expect(p.copyWith(trackStock: false).isLowStock, isFalse);
       expect(p.copyWith(stock: 10).isLowStock, isFalse);
+    });
+  });
+
+  group('Held (parked) invoices', () {
+    HeldCart sample() => HeldCart(
+          id: 'h1',
+          label: 'Ali',
+          createdAt: DateTime(2026, 3, 4, 10, 30),
+          lines: const [
+            HeldCartLine(
+                productId: 'p1',
+                productName: 'Sugar',
+                quantity: 2,
+                unitPrice: 120),
+            HeldCartLine(
+                productId: 'p2',
+                productName: 'Tea',
+                quantity: 1.5,
+                unitPrice: 200),
+          ],
+          customerName: 'Ali',
+        );
+
+    test('totals add up across lines', () {
+      final cart = sample();
+      expect(cart.total, closeTo(540, 0.0001));
+      expect(cart.itemCount, closeTo(3.5, 0.0001));
+    });
+
+    test('round-trips through toMap/fromMap', () {
+      final copy = HeldCart.fromMap(sample().toMap());
+      expect(copy.id, 'h1');
+      expect(copy.label, 'Ali');
+      expect(copy.lines.length, 2);
+      expect(copy.lines.first.total, 240);
+      expect(copy.createdAt, DateTime(2026, 3, 4, 10, 30));
     });
   });
 }

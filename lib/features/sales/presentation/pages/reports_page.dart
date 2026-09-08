@@ -10,6 +10,7 @@ import '../../../../core/data/hive_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/printer_helper.dart';
 import '../../../billing/domain/entities/payment_method.dart';
@@ -465,11 +466,7 @@ class _OverviewTab extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppTheme.primaryColor, Color(0xFF564FDB)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: themeController.accent.gradient,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Column(
@@ -935,7 +932,7 @@ class _TopProducts extends StatelessWidget {
                       radius: 11,
                       backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.12),
                       child: Text('${i + 1}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: AppTheme.primaryColor)),

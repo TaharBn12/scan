@@ -5,7 +5,9 @@ import '../../domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/product/domain/usecases/product_usecases.dart';
 import 'package:billing_app/features/customers/domain/entities/customer.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../core/utils/printer_helper.dart';
+import '../../data/held_cart_store.dart';
 import '../../../../core/data/hive_database.dart';
 
 part 'billing_event.dart';
@@ -41,6 +43,8 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
         (event, emit) => emit(state.copyWith(initialPayment: event.amount)));
     on<SetSaleNoteEvent>(
         (event, emit) => emit(state.copyWith(note: event.note)));
+    on<HoldCartEvent>(_onHoldCart);
+    on<ResumeHeldCartEvent>(_onResumeHeldCart);
     on<ClearBillingErrorEvent>(
         (event, emit) => emit(state.copyWith(clearError: true)));
   }
@@ -118,6 +122,54 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
 
   void _onClearCart(ClearCartEvent event, Emitter<BillingState> emit) {
     emit(const BillingState());
+  }
+
+  /// Parks the cart (never silently loses it: an empty cart is a no-op).
+  Future<void> _onHoldCart(
+      HoldCartEvent event, Emitter<BillingState> emit) async {
+    if (state.cartItems.isEmpty) return;
+    final cart = HeldCart(
+      id: const Uuid().v4(),
+      label: event.label,
+      createdAt: DateTime.now(),
+      customerId: state.customerId,
+      customerName: state.customerName,
+      note: state.note,
+      lines: state.cartItems
+          .map((item) => HeldCartLine(
+                productId: item.product.id,
+                productName: item.product.name,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+              ))
+          .toList(),
+    );
+    await heldCarts.save(cart);
+    emit(const BillingState());
+  }
+
+  /// Restores a parked invoice. Products deleted in the meantime are simply
+  /// dropped so the till never crashes on stale data.
+  Future<void> _onResumeHeldCart(
+      ResumeHeldCartEvent event, Emitter<BillingState> emit) async {
+    final box = HiveDatabase.productBox;
+    final items = <CartItem>[];
+    for (final line in event.cart.lines) {
+      final product = box.get(line.productId);
+      if (product == null) continue;
+      items.add(CartItem(
+        product: product,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+      ));
+    }
+    await heldCarts.remove(event.cart.id);
+    emit(BillingState(
+      cartItems: items,
+      customerId: event.cart.customerId,
+      customerName: event.cart.customerName,
+      note: event.cart.note,
+    ));
   }
 
   Future<void> _onPrintReceipt(

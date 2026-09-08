@@ -264,7 +264,7 @@ class _ProductListPageState extends State<ProductListPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: IconButton(
-                          icon: const Icon(Icons.qr_code_scanner,
+                          icon: Icon(Icons.qr_code_scanner,
                               color: AppTheme.primaryColor),
                           onPressed: () => _scanQR(state.products),
                           padding: const EdgeInsets.all(15),

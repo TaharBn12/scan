@@ -511,4 +511,60 @@ const Map<String, String> stringsAr = {
   'max_chars': '{count} حرفاً كحد أقصى',
   'save_details': 'حفظ المعلومات',
   'shop_saved': 'تم حفظ معلومات المحل',
+
+  // ---- Dashboard 3.0 ----
+  'dashboard': 'لوحة التحكم',
+  'welcome_back': 'مرحباً بك',
+  'quick_actions': 'إجراءات سريعة',
+  'today_profit': 'ربح اليوم',
+  'invoices_today': 'فواتير اليوم',
+  'last_7_days': 'آخر 7 أيام',
+  'view_all': 'عرض الكل',
+  'avg_ticket_short': 'معدل الفاتورة',
+  'offline_mode': 'يعمل بدون إنترنت',
+  'offline_mode_hint': 'كل بياناتك محفوظة داخل الهاتف فقط، بدون أي ربط بموقع أو خادم خارجي.',
+  'items_in_stock': 'منتج في المخزون',
+  'business_pulse': 'نبض المحل',
+  'no_sales_today': 'لا توجد مبيعات اليوم بعد',
+
+  // ---- Global search ----
+  'search_everything': 'بحث شامل',
+  'search_all_hint': 'ابحث عن منتج، زبون أو رقم فاتورة…',
+  'no_results': 'لا توجد نتائج',
+  'start_typing': 'اكتب للبحث في المنتجات والزبائن والفواتير',
+  'results_invoices': 'الفواتير',
+
+  // ---- Held (parked) invoices ----
+  'hold_invoice': 'تعليق الفاتورة',
+  'held_invoices': 'الفواتير المعلّقة',
+  'held_invoices_hint': 'احفظ السلة الحالية وتابع زبوناً آخر، ثم استرجعها لاحقاً.',
+  'resume': 'استئناف',
+  'invoice_held': 'تم تعليق الفاتورة',
+  'invoice_resumed': 'تم استرجاع الفاتورة',
+  'no_held_invoices': 'لا توجد فواتير معلّقة',
+  'hold_name_hint': 'اسم أو ملاحظة (اختياري)',
+  'delete_held_confirm': 'حذف الفاتورة المعلّقة؟',
+  'held_count': '{count} معلّقة',
+  'cart_empty_to_hold': 'السلة فارغة.',
+
+  // ---- Appearance ----
+  'accent_color': 'اللون الأساسي',
+  'accent_indigo': 'بنفسجي',
+  'accent_emerald': 'زمردي',
+  'accent_ocean': 'أزرق',
+  'accent_sunset': 'برتقالي',
+  'accent_rose': 'وردي',
+  'accent_graphite': 'رمادي',
+  'theme_mode': 'المظهر',
+  'compact_mode': 'العرض المضغوط',
+  'compact_mode_hint': 'مسافات أصغر لعرض عناصر أكثر في الشاشة',
+
+  // ---- Weekday short labels (charts) ----
+  'day_mon': 'إث',
+  'day_tue': 'ثل',
+  'day_wed': 'أر',
+  'day_thu': 'خم',
+  'day_fri': 'جم',
+  'day_sat': 'سب',
+  'day_sun': 'أح',
 };

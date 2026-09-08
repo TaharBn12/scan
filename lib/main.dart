@@ -9,6 +9,7 @@ import 'core/settings/app_settings_controller.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'core/utils/backup_helper.dart';
+import 'features/billing/data/held_cart_store.dart';
 import 'features/billing/presentation/bloc/billing_bloc.dart';
 import 'features/expenses/presentation/bloc/expense_bloc.dart';
 import 'features/inventory/presentation/bloc/inventory_bloc.dart';
@@ -23,6 +24,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await HiveDatabase.init();
   await di.init();
+  // Parked invoices are restored so a restart never loses a counter queue.
+  heldCarts.load();
   // Daily safety net: writes a backup file at most once a day (best effort).
   BackupHelper.autoBackupIfDue();
   runApp(const MyApp());
@@ -89,17 +92,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             create: (context) =>
                 di.sl<InventoryBloc>()..add(LoadInventory())),
       ],
-      child: ValueListenableBuilder<ThemeMode>(
+      child: ValueListenableBuilder<ThemeSettings>(
         valueListenable: themeController,
-        builder: (context, mode, _) {
+        builder: (context, themeSettings, _) {
+          final density = themeSettings.compact
+              ? VisualDensity.compact
+              : VisualDensity.standard;
           return ValueListenableBuilder<AppSettings>(
             valueListenable: appSettings,
             builder: (context, settings, _) {
               return MaterialApp.router(
                 onGenerateTitle: (context) => context.l10n.appTitle,
-                theme: AppTheme.lightTheme,
-                darkTheme: AppTheme.darkTheme,
-                themeMode: mode,
+                theme: AppTheme.light(themeSettings.accent)
+                    .copyWith(visualDensity: density),
+                darkTheme: AppTheme.dark(themeSettings.accent)
+                    .copyWith(visualDensity: density),
+                themeMode: themeSettings.mode,
                 routerConfig: router,
                 debugShowCheckedModeBanner: false,
                 locale: settings.locale,

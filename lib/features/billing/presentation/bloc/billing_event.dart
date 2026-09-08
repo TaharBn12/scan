@@ -115,3 +115,21 @@ class SetSaleNoteEvent extends BillingEvent {
   @override
   List<Object?> get props => [note];
 }
+
+/// Parks the current cart so the cashier can serve somebody else and
+/// resume this invoice later.
+class HoldCartEvent extends BillingEvent {
+  final String label;
+  const HoldCartEvent(this.label);
+  @override
+  List<Object?> get props => [label];
+}
+
+/// Puts a parked invoice back into the cart (and removes it from the
+/// held list). Lines whose product no longer exists are skipped.
+class ResumeHeldCartEvent extends BillingEvent {
+  final HeldCart cart;
+  const ResumeHeldCartEvent(this.cart);
+  @override
+  List<Object?> get props => [cart.id];
+}

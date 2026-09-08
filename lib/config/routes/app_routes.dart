@@ -17,6 +17,7 @@ import '../../features/customers/presentation/pages/customers_page.dart';
 import '../../features/customers/presentation/pages/customer_form_page.dart';
 import '../../features/customers/presentation/pages/customer_detail_page.dart';
 import '../../features/menu/presentation/pages/menu_page.dart';
+import '../../features/search/presentation/pages/search_page.dart';
 import '../../features/sales/presentation/pages/invoice_page.dart';
 import '../../features/expenses/presentation/pages/expenses_page.dart';
 import '../../features/inventory/presentation/pages/purchases_page.dart';
@@ -89,6 +90,10 @@ final router = GoRouter(
           },
         ),
       ],
+    ),
+    GoRoute(
+      path: '/search',
+      builder: (context, state) => const SearchPage(),
     ),
     GoRoute(
       path: '/settings',
