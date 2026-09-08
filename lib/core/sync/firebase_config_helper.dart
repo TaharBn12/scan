@@ -76,17 +76,20 @@ class FirebaseAppConfig {
   }
 
   /// Options for [Firebase.initializeApp]. Only Firestore is used, so the
-  /// optional fields (auth domain, bucket…) may stay null.
+  /// client ids / bucket / sender id stay inert; newer firebase_core
+  /// versions require them non-null, hence the fallbacks.
   FirebaseOptions toOptions() => FirebaseOptions(
         apiKey: apiKey,
         appId: appId,
-        // Non-nullable in current firebase_core; console configs always
-        // carry it, fall back to the standard domain otherwise.
+        // Console configs always carry the auth domain; fall back to the
+        // standard one otherwise.
         authDomain: authDomain ?? '$projectId.firebaseapp.com',
         projectId: projectId,
         storageBucket: storageBucket,
         messagingSenderId: messagingSenderId,
-        androidClientId: androidClientId,
+        // Only used by Firebase Auth; a placeholder keeps the SDK happy
+        // when the merchant only pasted the web-app config.
+        androidClientId: androidClientId ?? '0',
         iosClientId: iOSClientId,
       );
 }
