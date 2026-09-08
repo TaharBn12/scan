@@ -110,8 +110,31 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - name: Build release APK
         run: flutter build apk --release
+      - name: Rename APK
+        id: apk
+        run: |
+          VERSION=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
+          NAME="billing_app-v${VERSION%%+*}-build${GITHUB_RUN_NUMBER}"
+          cp build/app/outputs/flutter-apk/app-release.apk "${NAME}.apk"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          ls -lh "${NAME}.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ steps.apk.outputs.name }}.apk
           retention-days: 30
+
+      # A downloadable release so the APK can be installed straight from a
+      # phone browser (artifacts require a GitHub login and expire).
+      - name: Publish the APK as a GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.apk.outputs.name }}"
+          gh release create "$TAG" "${TAG}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes "Release APK built from \`${GITHUB_REF_NAME}\` (commit ${GITHUB_SHA::7}). Offline POS v3.0: new design system, dashboard, global search, held invoices." \
+          || gh release upload "$TAG" "${TAG}.apk" --clobber
+          echo "APK: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
