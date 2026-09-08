@@ -227,8 +227,8 @@ class _ProductFormState extends State<ProductForm> {
                     if (!_isEdit) ...[
                       const SizedBox(height: 6),
                       Text(l10n.t('scan_type_generate'),
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF4C669A))),
+                          style: TextStyle(
+                              fontSize: 12, color: context.mutedColor)),
                     ],
                     const SizedBox(height: 24),
                   ] else if (_isEdit) ...[
@@ -311,8 +311,8 @@ class _ProductFormState extends State<ProductForm> {
                   ),
                   const SizedBox(height: 4),
                   Text(l10n.t('used_for_profit'),
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF4C669A))),
+                      style: TextStyle(
+                          fontSize: 12, color: context.mutedColor)),
                   const SizedBox(height: 24),
                   InputLabel(text: l10n.t('category_optional')),
                   _categoryField(l10n),

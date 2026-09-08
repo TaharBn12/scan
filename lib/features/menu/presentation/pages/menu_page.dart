@@ -26,7 +26,17 @@ class MenuPage extends StatelessWidget {
       builder: (context, _) {
         final isAdmin = sessionController.isAdmin;
         return Scaffold(
-          body: CustomScrollView(
+          body: RefreshIndicator(
+            onRefresh: () async {
+              context.read<ProductBloc>().add(LoadProducts());
+              context.read<SaleBloc>().add(LoadSales());
+              context.read<ExpenseBloc>().add(LoadExpenses());
+              context.read<ShopBloc>().add(LoadShopEvent());
+              heldCarts.load();
+              await Future<void>.delayed(const Duration(milliseconds: 350));
+            },
+            child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(child: _Header(isAdmin: isAdmin)),
               SliverPadding(
@@ -154,6 +164,7 @@ class MenuPage extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
         );
       },

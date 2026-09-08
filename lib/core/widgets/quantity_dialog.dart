@@ -5,6 +5,7 @@ import '../settings/app_settings_controller.dart';
 import '../utils/app_validators.dart';
 import '../utils/money.dart';
 import '../../features/product/domain/entities/product.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Asks for a quantity (and optionally a per-sale price). Decimal input is
 /// only enabled for units that allow it (kg, g, L, ml, m) when the merchant
@@ -114,7 +115,7 @@ class _QuantityDialogState extends State<_QuantityDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${l10n.quantity} ($unit)',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                style: TextStyle(fontSize: 12, color: context.mutedColor)),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -168,7 +169,7 @@ class _QuantityDialogState extends State<_QuantityDialog> {
               const SizedBox(height: 16),
               Text('${l10n.t('edit_price_for_sale')} (${Money.symbol}/$unit)',
                   style:
-                      const TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                      TextStyle(fontSize: 12, color: context.mutedColor)),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _priceCtrl,

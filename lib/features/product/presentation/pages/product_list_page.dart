@@ -275,8 +275,8 @@ class _ProductListPageState extends State<ProductListPage> {
                   const SizedBox(height: 6),
                   Text(
                       '${l10n.t('tap_icon_scanner')} · ${l10n.t('items_count', {'count': state.products.length})}',
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF4C669A))),
+                      style: TextStyle(
+                          fontSize: 12, color: context.mutedColor)),
                   if (state.categories.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     SizedBox(
