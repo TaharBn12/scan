@@ -17,7 +17,10 @@ import '../../features/customers/presentation/pages/customers_page.dart';
 import '../../features/customers/presentation/pages/customer_form_page.dart';
 import '../../features/customers/presentation/pages/customer_detail_page.dart';
 import '../../features/menu/presentation/pages/menu_page.dart';
+import '../../features/customers/presentation/pages/debts_page.dart';
+import '../../features/inventory/presentation/pages/stock_take_page.dart';
 import '../../features/search/presentation/pages/search_page.dart';
+import '../../features/shifts/presentation/pages/shift_page.dart';
 import '../../features/sales/presentation/pages/invoice_page.dart';
 import '../../features/expenses/presentation/pages/expenses_page.dart';
 import '../../features/inventory/presentation/pages/purchases_page.dart';
@@ -90,6 +93,10 @@ final router = GoRouter(
           },
         ),
       ],
+    ),
+    GoRoute(
+      path: '/shift',
+      builder: (context, state) => const ShiftPage(),
     ),
     GoRoute(
       path: '/search',
@@ -168,6 +175,10 @@ final router = GoRouter(
             return NewPurchasePage(initialProduct: product);
           },
         ),
+        GoRoute(
+          path: 'stocktake',
+          builder: (context, state) => const StockTakePage(),
+        ),
       ],
     ),
     GoRoute(
@@ -185,6 +196,10 @@ final router = GoRouter(
       path: '/customers',
       builder: (context, state) => const CustomersPage(),
       routes: [
+        GoRoute(
+          path: 'debts',
+          builder: (context, state) => const DebtsPage(),
+        ),
         GoRoute(
           path: 'picker',
           builder: (context, state) => const CustomersPage(selectionMode: true),

@@ -11,6 +11,7 @@ import '../../../billing/data/held_cart_store.dart';
 import '../../../expenses/presentation/bloc/expense_bloc.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../shifts/data/shift_store.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
 
 /// The home of the app: a live dashboard (today's numbers + 7-day trend)
@@ -79,6 +80,26 @@ class MenuPage extends StatelessWidget {
                         color: AppTheme.warning,
                         onTap: () => context.push('/products'),
                       ),
+                      ValueListenableBuilder<Shift?>(
+                        valueListenable: shiftStore.current,
+                        builder: (context, shift, _) => _ActionCard(
+                          icon: Icons.point_of_sale_rounded,
+                          label: l10n.t('shift'),
+                          subtitle: shift == null
+                              ? l10n.t('shift_subtitle')
+                              : l10n.t('expected_cash'),
+                          color: const Color(0xFF7C3AED),
+                          badge: shift == null ? 0 : 1,
+                          onTap: () => context.push('/shift'),
+                        ),
+                      ),
+                      _ActionCard(
+                        icon: Icons.manage_search_rounded,
+                        label: l10n.t('search_everything'),
+                        subtitle: l10n.t('search_all_hint'),
+                        color: const Color(0xFF64748B),
+                        onTap: () => context.push('/search'),
+                      ),
                     ]),
                     if (isAdmin) ...[
                       const SizedBox(height: 24),
@@ -121,6 +142,25 @@ class MenuPage extends StatelessWidget {
                           subtitle: l10n.labelsSubtitle,
                           color: const Color(0xFF14B8A6),
                           onTap: () => context.push('/labels'),
+                        ),
+                        _ActionCard(
+                          icon: Icons.fact_check_rounded,
+                          label: l10n.t('stock_take'),
+                          subtitle: l10n.t('stock_take_subtitle'),
+                          color: const Color(0xFF0891B2),
+                          onTap: () => context.push('/inventory/stocktake'),
+                        ),
+                        BlocBuilder<SaleBloc, SaleState>(
+                          builder: (context, state) => _ActionCard(
+                            icon: Icons.notifications_active_rounded,
+                            label: l10n.t('debt_followup'),
+                            subtitle: l10n.t('debt_followup_subtitle'),
+                            color: const Color(0xFFDB2777),
+                            badge: state.unpaidCreditSales.isEmpty
+                                ? 0
+                                : state.unpaidCreditSales.length,
+                            onTap: () => context.push('/customers/debts'),
+                          ),
                         ),
                         _ActionCard(
                           icon: Icons.storefront_rounded,
@@ -315,6 +355,15 @@ class _TodayHeadline extends StatelessWidget {
                       if (user != null)
                         _HeaderPill(
                             icon: Icons.person_rounded, text: user.name),
+                      ValueListenableBuilder<Shift?>(
+                        valueListenable: shiftStore.current,
+                        builder: (context, shift, _) => shift == null
+                            ? const SizedBox.shrink()
+                            : _HeaderPill(
+                                icon: Icons.lock_open_rounded,
+                                text: l10n.t('shift'),
+                              ),
+                      ),
                     ],
                   ),
                 ],
@@ -401,7 +450,7 @@ class _KpiGrid extends StatelessWidget {
                       value: Money.format(sales.totalOutstandingCredit),
                       color: AppTheme.warning,
                       trailingText: '${sales.unpaidCreditSales.length}',
-                      onTap: () => context.push('/customers'),
+                      onTap: () => context.push('/customers/debts'),
                     ),
                     StatTile(
                       icon: Icons.payments_rounded,

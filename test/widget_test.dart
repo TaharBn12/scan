@@ -7,6 +7,7 @@ import 'package:billing_app/core/utils/cash_change.dart';
 import 'package:billing_app/core/utils/search_text.dart';
 import 'package:billing_app/features/billing/data/held_cart_store.dart';
 import 'package:billing_app/features/product/domain/reorder_advisor.dart';
+import 'package:billing_app/features/shifts/data/shift_store.dart';
 import 'package:billing_app/features/billing/domain/entities/payment_method.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/sales/domain/entities/sale.dart';
@@ -265,6 +266,47 @@ void main() {
       expect(advice.sellsRegularly, isFalse);
       expect(advice.daysOfCover, isNull);
       expect(advice.suggestedQuantity, 9); // 5*2 - 1
+    });
+  });
+
+  group('Cash drawer shift', () {
+    Shift openShift() => Shift(
+          id: 'sh1',
+          openedAt: DateTime(2026, 5, 2, 8),
+          openedBy: 'Amine',
+          openingFloat: 2000,
+        );
+
+    test('expected cash = float + cash in - cash out', () {
+      final closed = openShift().copyWith(
+        cashSales: 18500,
+        creditCollected: 3000,
+        paidOut: 1500,
+        countedCash: 22000,
+        closedAt: DateTime(2026, 5, 2, 20),
+      );
+      expect(closed.expectedCash, 22000);
+      expect(closed.difference, 0);
+      expect(closed.isOpen, isFalse);
+    });
+
+    test('reports a shortage and a surplus', () {
+      final base = openShift().copyWith(
+        cashSales: 10000,
+        closedAt: DateTime(2026, 5, 2, 20),
+      );
+      expect(base.copyWith(countedCash: 11500).difference, -500);
+      expect(base.copyWith(countedCash: 12300).difference, 300);
+    });
+
+    test('an open shift stays open and round-trips', () {
+      final open = openShift();
+      expect(open.isOpen, isTrue);
+      final copy = Shift.fromMap(open.toMap());
+      expect(copy.isOpen, isTrue);
+      expect(copy.openedBy, 'Amine');
+      expect(copy.openingFloat, 2000);
+      expect(copy.expectedCash, 2000);
     });
   });
 }

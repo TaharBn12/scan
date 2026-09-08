@@ -10,6 +10,7 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'core/utils/backup_helper.dart';
 import 'features/billing/data/held_cart_store.dart';
+import 'features/shifts/data/shift_store.dart';
 import 'features/billing/presentation/bloc/billing_bloc.dart';
 import 'features/expenses/presentation/bloc/expense_bloc.dart';
 import 'features/inventory/presentation/bloc/inventory_bloc.dart';
@@ -26,6 +27,8 @@ void main() async {
   await di.init();
   // Parked invoices are restored so a restart never loses a counter queue.
   heldCarts.load();
+  // Restore the open cash-drawer session, if the till was left open.
+  shiftStore.load();
   // Daily safety net: writes a backup file at most once a day (best effort).
   BackupHelper.autoBackupIfDue();
   runApp(const MyApp());
