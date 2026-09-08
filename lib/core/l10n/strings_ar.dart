@@ -372,6 +372,28 @@ const Map<String, String> stringsAr = {
   'sync_pending': '{count} تغيير بانتظار المزامنة',
   'auto_sync': 'مزامنة تلقائية',
   'auto_sync_hint': 'عند حفظ كل عملية بيع (إذا توفر الإنترنت)',
+
+  // ---- Cloud sync (Firebase) ----
+  'cloud_sync': 'المزامنة السحابية',
+  'cloud_sync_hint':
+      'ينسخ بياناتك مباشرة إلى مشروع Firebase خاص بك، وتقرأ لوحة الويب (web-dashboard) نفس البيانات في المتصفح.',
+  'cloud_config_label': 'إعدادات Firebase',
+  'cloud_config_hint':
+      'من وحدة تحكم Firebase: أضف تطبيق ويب وانسخ إعداداته. يجب تفعيل Cloud Firestore في المشروع.',
+  'cloud_save': 'حفظ الإعدادات',
+  'cloud_connected': 'متصل بمشروع {project}',
+  'cloud_config_saved': 'تم ربط مشروع Firebase: {project}',
+  'cloud_config_invalid': 'إعدادات غير صالحة: {error}',
+  'cloud_needs_config': 'احفظ إعدادات Firebase أولاً.',
+  'cloud_dashboard_url': 'رابط لوحة الويب (اختياري)',
+  'cloud_open_dashboard': 'فتح اللوحة',
+  'cloud_last_sync': 'آخر مزامنة سحابية: {time}',
+  'cloud_sync_now': 'مزامنة سحابية الآن',
+  'cloud_sync_success': 'اكتملت المزامنة السحابية',
+  'cloud_sync_failed': 'فشلت المزامنة السحابية: {error}',
+  'cloud_auto_sync': 'مزامنة سحابية تلقائية',
+  'cloud_auto_sync_hint':
+      'يدفع البيانات إلى Firebase تلقائياً بعد كل عملية بيع (عند توفر الإنترنت)',
   'security': 'الحماية',
   'pin_lock': 'قفل برمز PIN',
   'pin_lock_hint': 'طلب رمز PIN عند فتح التطبيق',

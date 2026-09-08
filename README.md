@@ -20,6 +20,8 @@ https://github.com/user-attachments/assets/f2d16454-5408-43b3-b207-cd843bbc2c9e
 - **Reports** with period filter (day / week / month / custom range), daily & monthly bar charts, payment & cashier breakdown, top products, inventory value, Z-report printing and CSV / PDF export.
 - **Units** (piece, kg, g, L, mL, m, box, pack) with decimal quantities for weighed goods.
 - **Two-way website sync** – outbox of changed products / sales / customers / expenses / purchases pushed to your site, product changes pulled back (contract below).
+- **Cloud sync (Firebase)** – paste your own Firebase project config in Settings → Cloud Sync and the same outbox is mirrored to Cloud Firestore in batches, with product changes pulled back (last-write-wins). Works alongside the website sync; both drain one shared queue.
+- **Live web dashboard** (`web-dashboard/`) – a static Arabic dashboard that reads the same Firestore project in real time: today's revenue / invoices / profit, low stock, daily expenses. Host it with Firebase Hosting (or any static host) and put its URL in the app.
 - **App lock with PIN** (auto-lock after 2 min in background) and **multi-user mode** (admin / cashier, each with their own PIN; cashier name stored on every sale).
 - **Daily expenses** with categories → real net profit in reports.
 - **Barcode labels** – A4 PDF sticker sheets or thermal label printing for products without a barcode (auto-generated internal codes).
@@ -37,6 +39,25 @@ POST <base>/api/sync/push
 GET <base>/api/sync/products?since=<ISO-8601>
   -> 200 { "products": [ { ...product map... } ], "deleted": [ "id", ... ] }
 ```
+
+## Cloud sync (Firebase) & web dashboard
+
+Instead of (or next to) your own website, the app can mirror the same outbox
+to a Cloud Firestore collection in **your own** Firebase project:
+
+1. Create a Firebase project, enable **Cloud Firestore**, add a **Web App** and copy its config.
+2. In the app: **Settings → Cloud Sync**, paste the config and save. Every queued
+   change is pushed as `products/{id}`, `sales/{id}`, `customers/{id}`,
+   `expenses/{id}`, `purchases/{id}`, `stock_movements/{id}` (same maps as the
+   website sync), plus `meta/shop` (shop name + currency). Product changes are
+   pulled back with last-write-wins on `updatedAt`.
+3. Host `web-dashboard/` anywhere static (Firebase Hosting is easiest) after
+   pasting the same config into `web-dashboard/firebase-config.js` — it reads
+   the project in real time. See `web-dashboard/README.md` for the full
+   instructions, including recommended Firestore security rules.
+
+No Firebase credentials live in this repository: the config is pasted per
+shop, on the phone.
 
 ## 🎯 Project Scope
 
@@ -58,6 +79,7 @@ Built leveraging industry-standard architectural principles (Clean Architecture 
 - **Dependency Injection**: `get_it`
 - **Routing**: `go_router`
 - **Local Database**: `hive` & `hive_flutter`
+- **Cloud Sync**: `firebase_core` & `cloud_firestore` (merchant's own project, config pasted in Settings)
 - **Data Modeling**: `json_serializable`, `equatable`
 - **Functional Programming**: `fpdart`
 - **Hardware Integrations**: `mobile_scanner` (barcodes), `print_bluetooth_thermal`

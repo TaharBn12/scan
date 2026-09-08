@@ -8,12 +8,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' show DateFormat;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/pin_helper.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/settings/app_settings_controller.dart';
+import '../../../../core/sync/cloud_sync_helper.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/backup_helper.dart';
@@ -42,7 +44,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   final TextEditingController _syncUrlController = TextEditingController();
   final TextEditingController _currencyController = TextEditingController();
+  final TextEditingController _cloudConfigController =
+      TextEditingController();
+  final TextEditingController _cloudUrlController = TextEditingController();
   bool _syncing = false;
+  bool _cloudSyncing = false;
   bool _backingUp = false;
 
   @override
@@ -51,12 +57,16 @@ class _SettingsPageState extends State<SettingsPage> {
     context.read<PrinterBloc>().add(InitPrinterEvent());
     _syncUrlController.text = SyncHelper.getUrl() ?? '';
     _currencyController.text = appSettings.value.currencySymbol;
+    _cloudConfigController.text = CloudSyncHelper.configJson() ?? '';
+    _cloudUrlController.text = CloudSyncHelper.dashboardUrl() ?? '';
   }
 
   @override
   void dispose() {
     _syncUrlController.dispose();
     _currencyController.dispose();
+    _cloudConfigController.dispose();
+    _cloudUrlController.dispose();
     super.dispose();
   }
 
@@ -263,6 +273,197 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {});
     _snack(l10n.t('queued_count', {'count': SyncHelper.pendingCount}),
         color: Colors.green);
+  }
+
+  // ------------------------------------------------------- cloud (Firebase)
+
+  Future<void> _saveCloudConfig() async {
+    final l10n = context.l10n;
+    try {
+      await CloudSyncHelper.saveConfig(_cloudConfigController.text);
+      if (!mounted) return;
+      setState(() {});
+      _snack(l10n.t('cloud_config_saved',
+          {'project': CloudSyncHelper.projectId() ?? ''}),
+          color: Colors.green);
+    } on FormatException catch (e) {
+      _snack(l10n.t('cloud_config_invalid', {'error': e.message ?? ''}),
+          color: Colors.red);
+    } catch (e) {
+      _snack(l10n.t('cloud_sync_failed', {'error': e.toString()}),
+          color: Colors.red);
+    }
+  }
+
+  Future<void> _cloudSyncNow() async {
+    final l10n = context.l10n;
+    if (!CloudSyncHelper.hasConfig()) {
+      _snack(l10n.t('cloud_needs_config'), color: Colors.orange);
+      return;
+    }
+    setState(() => _cloudSyncing = true);
+    final result = await CloudSyncHelper.syncAll();
+    if (!mounted) return;
+    setState(() => _cloudSyncing = false);
+    if (result.ok) {
+      if (result.pulledProducts > 0) {
+        context.read<ProductBloc>().add(LoadProducts());
+      }
+      _snack(
+          '${l10n.t('cloud_sync_success')} · ${l10n.t('sync_summary', {
+                'pushed': result.pushed,
+                'pulled': result.pulledProducts
+              })}',
+          color: Colors.green);
+    } else {
+      _snack(l10n.t('cloud_sync_failed', {'error': result.error ?? ''}),
+          color: Colors.red);
+    }
+  }
+
+  Future<void> _openCloudDashboard() async {
+    final raw = _cloudUrlController.text.trim();
+    if (raw.isEmpty) return;
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // No browser / unsupported scheme: best effort only.
+    }
+  }
+
+  Widget _buildCloudSync() {
+    final l10n = context.l10n;
+    final project = CloudSyncHelper.projectId();
+    final configured = project != null && project.isNotEmpty;
+    final last = CloudSyncHelper.lastSyncAt();
+    final lastText = last == null
+        ? l10n.t('never')
+        : DateFormat('dd/MM/yyyy HH:mm').format(last);
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (configured)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_done, color: Colors.teal, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                        l10n.t('cloud_connected', {'project': project!}),
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          _label(l10n.t('cloud_config_label')),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _cloudConfigController,
+            maxLines: 5,
+            textDirection: TextDirection.ltr,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            decoration: InputDecoration(
+              hintText: '{"apiKey": "...", "projectId": "...", ...}',
+              isDense: true,
+              border:
+                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: _saveCloudConfig,
+                icon: const Icon(Icons.cloud_upload, size: 18),
+                label: Text(l10n.t('cloud_save')),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(l10n.t('cloud_config_hint'),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color:
+                            Theme.of(context).textTheme.bodySmall?.color)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _label(l10n.t('cloud_dashboard_url')),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _cloudUrlController,
+                  keyboardType: TextInputType.url,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(
+                    hintText: 'https://my-shop.web.app',
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onChanged: (v) => CloudSyncHelper.setDashboardUrl(v.trim()),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.open_in_browser, size: 20),
+                tooltip: l10n.t('cloud_open_dashboard'),
+                onPressed: _openCloudDashboard,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (configured) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${l10n.t('cloud_last_sync', {'time': lastText})}\n${l10n.t('sync_pending', {'count': CloudSyncHelper.pendingCount})}',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).textTheme.bodySmall?.color),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: _cloudSyncing ? null : _cloudSyncNow,
+                  icon: _cloudSyncing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.cloud_sync, size: 18),
+                  label: Text(l10n.t('cloud_sync_now')),
+                ),
+              ],
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.t('cloud_auto_sync'),
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text(l10n.t('cloud_auto_sync_hint'),
+                  style: const TextStyle(fontSize: 11)),
+              value: CloudSyncHelper.isAutoSyncEnabled(),
+              onChanged: (v) async {
+                await CloudSyncHelper.setAutoSyncEnabled(v);
+                if (mounted) setState(() {});
+              },
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(l10n.t('cloud_sync_hint'),
+              style: TextStyle(
+                  fontSize: 11,
+                  color: Theme.of(context).textTheme.bodySmall?.color)),
+        ],
+      ),
+    );
   }
 
   // ----------------------------------------------------------------- PIN
@@ -589,6 +790,9 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 20),
               _header(l10n.t('website_sync')),
               _buildSync(),
+              const SizedBox(height: 20),
+              _header(l10n.t('cloud_sync')),
+              _buildCloudSync(),
               const SizedBox(height: 20),
               _header(l10n.t('about')),
               _group([

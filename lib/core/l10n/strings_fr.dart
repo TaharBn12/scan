@@ -390,6 +390,28 @@ const Map<String, String> stringsFr = {
   'sync_pending': '{count} modifications en attente',
   'auto_sync': 'Synchroniser automatiquement',
   'auto_sync_hint': 'À chaque vente enregistrée (si connecté)',
+
+  // ---- Cloud sync (Firebase) ----
+  'cloud_sync': 'Synchronisation cloud',
+  'cloud_sync_hint':
+      'Miroite vos données en temps réel dans votre propre projet Firebase. Le tableau de bord web (web-dashboard) lit les mêmes données dans le navigateur.',
+  'cloud_config_label': 'Configuration Firebase',
+  'cloud_config_hint':
+      'Dans la console Firebase : ajoutez une application web et copiez sa configuration. Cloud Firestore doit être activé dans le projet.',
+  'cloud_save': 'Enregistrer la configuration',
+  'cloud_connected': 'Connecté au projet {project}',
+  'cloud_config_saved': 'Projet Firebase lié : {project}',
+  'cloud_config_invalid': 'Configuration invalide : {error}',
+  'cloud_needs_config': "Enregistrez d'abord la configuration Firebase.",
+  'cloud_dashboard_url': 'URL du tableau de bord (facultatif)',
+  'cloud_open_dashboard': 'Ouvrir le tableau de bord',
+  'cloud_last_sync': 'Dernière synchro cloud : {time}',
+  'cloud_sync_now': 'Synchroniser maintenant',
+  'cloud_sync_success': 'Synchronisation cloud terminée',
+  'cloud_sync_failed': 'Échec de la synchro cloud : {error}',
+  'cloud_auto_sync': 'Synchro cloud automatique',
+  'cloud_auto_sync_hint':
+      'Envoie vers Firebase automatiquement après chaque vente (si connecté)',
   'security': 'Sécurité',
   'pin_lock': 'Verrouillage par PIN',
   'pin_lock_hint': "Demander un PIN à l'ouverture de l'app",
