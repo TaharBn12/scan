@@ -788,11 +788,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
       return const SizedBox.shrink();
     }
     final l10n = context.l10n;
-    double revenue = 0;
     double cost = 0;
     bool missingCost = false;
     for (final item in state.cartItems) {
-      revenue += item.total;
       if (item.product.costPrice <= 0) {
         missingCost = true;
       } else {
