@@ -8,7 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../data/delivery_repository.dart';
-import '../../data/delivery_stats.dart';
+import '../../domain/entities/delivery.dart';
 import '../widgets/courier_earnings_sheet.dart';
 import '../widgets/delivery_style.dart';
 

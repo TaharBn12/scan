@@ -67,7 +67,6 @@ class _CourierEarningsSheetState extends State<_CourierEarningsSheet> {
       listenable: _listenables,
       builder: (context, _) {
         final earned = DeliveryRepository.earnedBy(widget.uid);
-        final paid = DeliveryRepository.paidOutTo(widget.uid);
         final balance = DeliveryRepository.balanceOf(widget.uid);
         final count = DeliveryRepository.deliveredCountOf(widget.uid);
         final series = DeliveryStats.dailySeries(days: 7, delivererId: widget.uid);
