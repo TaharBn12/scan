@@ -231,7 +231,7 @@ class BackupHelper {
     // Keep invoice numbering monotonic after a restore.
     int maxNumber = CloudDatabase.settingsBox.get('sale_counter') as int? ?? 0;
     for (final raw in CloudDatabase.salesBox.values) {
-      final n = ((raw as Map)['number'] as num?)?.toInt() ?? 0;
+      final n = (raw['number'] as num?)?.toInt() ?? 0;
       if (n > maxNumber) maxNumber = n;
     }
     await CloudDatabase.settingsBox.put('sale_counter', maxNumber);

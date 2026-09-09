@@ -12,7 +12,7 @@ class SaleRepositoryImpl implements SaleRepository {
     try {
       final box = CloudDatabase.salesBox;
       final sales = box.values
-          .map((raw) => Sale.fromMap(Map<String, dynamic>.from(raw as Map)))
+          .map((raw) => Sale.fromMap(raw))
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
       return Right(sales);

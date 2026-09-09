@@ -11,7 +11,7 @@ class CustomerRepositoryImpl implements CustomerRepository {
       final box = CloudDatabase.customersBox;
       final customers = box.values
           .map((raw) =>
-              Customer.fromMap(Map<String, dynamic>.from(raw as Map)))
+              Customer.fromMap(raw))
           .toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       return Right(customers);

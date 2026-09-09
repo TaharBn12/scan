@@ -6,7 +6,7 @@ import '../domain/entities/promotion.dart';
 class PromotionRepository {
   List<Promotion> getAll() {
     final promos = CloudDatabase.promotionsBox.values
-        .map((raw) => Promotion.fromMap(Map<String, dynamic>.from(raw as Map)))
+        .map((raw) => Promotion.fromMap(raw))
         .where((p) => p.id.isNotEmpty)
         .toList();
     // Product offers first so the engine sees the most specific rule first.

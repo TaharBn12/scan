@@ -14,7 +14,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
   Future<Either<Failure, List<Purchase>>> getPurchases() async {
     try {
       final list = CloudDatabase.purchasesBox.values
-          .map((raw) => Purchase.fromMap(Map<String, dynamic>.from(raw as Map)))
+          .map((raw) => Purchase.fromMap(raw))
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
       return Right(list);
@@ -73,7 +73,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
     try {
       final list = CloudDatabase.stockMovementsBox.values
           .map((raw) =>
-              StockMovement.fromMap(Map<String, dynamic>.from(raw as Map)))
+              StockMovement.fromMap(raw))
           .where((m) => productId == null || m.productId == productId)
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
@@ -136,8 +136,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
     final box = CloudDatabase.stockMovementsBox;
     if (box.length > 5000) {
       final all = box.toMap().entries.toList()
-        ..sort((a, b) => ((a.value as Map)['dateTime'] as String)
-            .compareTo((b.value as Map)['dateTime'] as String));
+        ..sort((a, b) => (a.value['dateTime'] as String)
+            .compareTo(b.value['dateTime'] as String));
       for (final e in all.take(box.length - 5000)) {
         await box.delete(e.key);
       }

@@ -9,7 +9,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   Future<Either<Failure, List<Expense>>> getExpenses() async {
     try {
       final list = CloudDatabase.expensesBox.values
-          .map((raw) => Expense.fromMap(Map<String, dynamic>.from(raw as Map)))
+          .map((raw) => Expense.fromMap(raw))
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
       return Right(list);
