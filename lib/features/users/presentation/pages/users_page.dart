@@ -9,6 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../delivery/data/delivery_repository.dart';
+import 'create_member_page.dart';
 import 'user_form_page.dart';
 
 /// Manage the shop's team, cloud side: pending join requests, roles,
@@ -33,6 +34,12 @@ class _UsersPageState extends State<UsersPage> {
       appBar: AppBar(
         title: Text(l10n.t('cloud_users_title')),
         actions: [
+          IconButton(
+            tooltip: l10n.t('add_member'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => CreateMemberPage(shopId: _shopId))),
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+          ),
           IconButton(
             tooltip: l10n.t('shop_code_label'),
             onPressed: () => _showShopCode(code),

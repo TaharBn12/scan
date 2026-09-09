@@ -934,4 +934,13 @@ const Map<String, String> stringsAr = {
   'member_duty_on': 'في الخدمة',
   'menu_deliveries': 'التوصيل',
   'menu_deliveries_subtitle': 'الطلبيات، الموصّلين، الخريطة الحية',
+
+  'add_member': 'إنشاء حساب عامل',
+  'add_member_subtitle': 'الحساب يولي شغال مباشرة. أعطي البريد وكلمة السر للعامل — يدخل بهم من هاتفو مباشرة. المدير ما يقدرش يشوف ولا يبدّل كلمات السر من بعد.',
+  'member_email_label': 'البريد الإلكتروني',
+  'member_password_label': 'كلمة السر',
+  'password_min_hint': '6 أحرف على الأقل',
+  'create_account_cta': 'أنشئ الحساب',
+  'member_created_toast': 'الحساب اتفتح',
+  'shop_code_readonly_hint': 'رمز المزامنة الخاص بمحلك — يتعمر وحدو وما يتبدّلش.',
 };

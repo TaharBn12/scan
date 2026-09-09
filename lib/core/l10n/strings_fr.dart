@@ -953,4 +953,13 @@ const Map<String, String> stringsFr = {
   'member_duty_on': 'En service',
   'menu_deliveries': 'Livraisons',
   'menu_deliveries_subtitle': 'Commandes, livreurs, carte en direct',
+
+  'add_member': 'Créer un compte employé',
+  'add_member_subtitle': 'Le compte est actif tout de suite. Donnez l\u2019email et le mot de passe à votre employé — il se connecte simplement sur son téléphone. Un gérant ne peut ni lire ni changer les mots de passe ensuite.',
+  'member_email_label': 'Email',
+  'member_password_label': 'Mot de passe',
+  'password_min_hint': '6 caractères au moins',
+  'create_account_cta': 'Créer le compte',
+  'member_created_toast': 'Compte créé',
+  'shop_code_readonly_hint': 'Le code de synchronisation de votre boutique — rempli automatiquement, non modifiable.',
 };

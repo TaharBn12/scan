@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 import 'cloud_database.dart';
@@ -247,6 +248,66 @@ class FirebaseLayer {
 
   static Future<void> removeMember(String shopId, String uid) =>
       CloudDatabase.shopMember(shopId, uid).remove();
+
+  // ------------------------------------------------- admin-created members
+
+  /// Creates a Firebase Auth account for a teammate WITHOUT signing the
+  /// admin out: account creation normally switches the session to the new
+  /// user, so it happens on a throwaway secondary Firebase app whose own
+  /// auth instance gets discarded right after.
+  static Future<String> createAuthAccount({
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final secondary = await Firebase.initializeApp(
+      name: 'member-creator-${DateTime.now().microsecondsSinceEpoch}',
+      options: Firebase.app().options,
+    );
+    try {
+      final auth = FirebaseAuth.instanceFor(app: secondary);
+      final cred = await auth.createUserWithEmailAndPassword(
+          email: email.trim(), password: password);
+      final user = cred.user;
+      if (user == null) {
+        throw FirebaseException(
+            plugin: 'cloud', code: 'no-user', message: 'no user returned');
+      }
+      await user.updateDisplayName(displayName.trim());
+      return user.uid;
+    } finally {
+      await secondary.delete();
+    }
+  }
+
+  /// Writes the full membership for an account the admin just created:
+  /// the member row inside *this* shop (active immediately — no approval
+  /// round trip) and the /users routing sliver. The shop code is the
+  /// admin's own: filled here, never typed, never editable.
+  static Future<void> enrollMember({
+    required String shopId,
+    required String uid,
+    required String name,
+    required String email,
+    required MemberRole role,
+  }) {
+    final now = ServerValue.timestamp;
+    return FirebaseDatabase.instance.ref().update({
+      'shops/$shopId/members/$uid': {
+        'name': name.trim(),
+        'email': email.trim(),
+        'role': role.name,
+        'active': true,
+        'joinedAt': now,
+      },
+      'users/$uid': {
+        'name': name.trim(),
+        'email': email.trim(),
+        'shopId': shopId,
+        'createdAt': now,
+      },
+    });
+  }
 
   // ------------------------------------------------------ deliverer state
 

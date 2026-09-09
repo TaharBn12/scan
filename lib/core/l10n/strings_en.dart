@@ -950,4 +950,13 @@ const Map<String, String> stringsEn = {
   'member_duty_on': 'On duty',
   'menu_deliveries': 'Deliveries',
   'menu_deliveries_subtitle': 'Orders, deliverers, live map',
+
+  'add_member': 'Create member account',
+  'add_member_subtitle': 'The account is active immediately. Hand the email and password to your teammate — he simply signs in on his own phone. An admin cannot read or change passwords afterwards.',
+  'member_email_label': 'Email',
+  'member_password_label': 'Password',
+  'password_min_hint': 'At least 6 characters',
+  'create_account_cta': 'Create the account',
+  'member_created_toast': 'Account created',
+  'shop_code_readonly_hint': 'Your shop sync code — filled automatically, cannot be changed.',
 };
