@@ -82,9 +82,11 @@ class SessionController extends ChangeNotifier {
     if (starts('/reports')) return canViewReports;
     if (starts('/expenses')) return canManageExpenses;
     if (starts('/inventory')) return canManageInventory;
+    if (starts('/promotions')) return canManageProducts;
     if (starts('/products/add') ||
         starts('/products/edit') ||
         starts('/products/low-stock') ||
+        starts('/products/dead-stock') ||
         starts('/labels')) {
       return canManageProducts;
     }

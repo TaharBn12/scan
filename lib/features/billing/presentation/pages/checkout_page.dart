@@ -13,6 +13,7 @@ import '../../../customers/domain/entities/customer.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../domain/entities/payment_method.dart';
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
@@ -72,6 +73,23 @@ class _CheckoutPageState extends State<CheckoutPage> {
       BuildContext context, BillingState billingState) async {
     final l10n = context.l10n;
     if (billingState.cartItems.isEmpty) return;
+
+    // Big discounts are a classic till leak: anything beyond the configured
+    // cap makes the cashier call the manager, who approves with their PIN
+    // right on this screen.
+    if (ManagerApproval.isRequired && billingState.discountAmount > 0) {
+      final pct = billingState.subtotal <= 0
+          ? 0.0
+          : billingState.discountAmount / billingState.subtotal * 100;
+      if (pct > ManagerApproval.discountLimitPercent + 0.0001) {
+        final ok = await ManagerApproval.request(
+          context,
+          reasonKey: 'approval_reason_discount',
+          reasonArgs: {'percent': pct.toStringAsFixed(0)},
+        );
+        if (!ok || !context.mounted) return;
+      }
+    }
 
     final isCredit = billingState.paymentMethod == PaymentMethod.credit;
     if (isCredit && billingState.customerId == null) {
@@ -149,6 +167,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
           .toList(),
       subtotal: billingState.subtotal,
       discountAmount: billingState.discountAmount,
+      promoDiscount: billingState.promoDiscount,
+      promoDescription:
+          billingState.appliedPromos.map((p) => p.label).join(' · '),
       total: billingState.totalAmount,
       paymentMethod: billingState.paymentMethod,
       isPaid: !isCredit || initialPayment + 0.005 >= billingState.totalAmount,
@@ -221,6 +242,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           _buildItemsTable(context, billingState, borderColor),
                           const SizedBox(height: 16),
                           _buildDiscountSection(context, billingState),
+                          if (billingState.appliedPromos.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            _buildOffersSection(context, billingState),
+                          ],
                           const SizedBox(height: 16),
                           _buildPaymentMethodSection(context, billingState),
                           const SizedBox(height: 16),
@@ -320,9 +345,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-              child: Column(
+                child: Column(
                 children: [
-                  if (billingState.discountAmount > 0) ...[
+                  if (billingState.discountAmount > 0 ||
+                      billingState.promoDiscount > 0) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -335,18 +361,43 @@ class _CheckoutPageState extends State<CheckoutPage> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                            '${l10n.discount}${billingState.discountIsPercent ? ' (${formatQty(billingState.discountValue)}%)' : ''}',
-                            style: const TextStyle(
-                                fontSize: 12, color: AppTheme.warning)),
-                        Text('-${Money.format(billingState.discountAmount)}',
-                            style: const TextStyle(
-                                fontSize: 12, color: AppTheme.warning)),
-                      ],
-                    ),
+                    if (billingState.discountAmount > 0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                              '${l10n.discount}${billingState.discountIsPercent ? ' (${formatQty(billingState.discountValue)}%)' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppTheme.warning)),
+                          Text('-${Money.format(billingState.discountAmount)}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppTheme.warning)),
+                        ],
+                      ),
+                    if (billingState.promoDiscount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.local_offer_outlined,
+                                    size: 13, color: AppTheme.success),
+                                const SizedBox(width: 4),
+                                Text(l10n.t('offers_discount'),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.success)),
+                              ],
+                            ),
+                            Text(
+                                '-${Money.format(billingState.promoDiscount)}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppTheme.success)),
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 8),
                   ],
                   Row(
@@ -436,6 +487,55 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Which offers fired on this bill, so the cashier can answer "why is it
+  /// cheaper?" without guessing.
+  Widget _buildOffersSection(BuildContext context, BillingState state) {
+    final l10n = context.l10n;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(context).copyWith(
+        border:
+            Border.all(color: AppTheme.success.withValues(alpha: 0.35)),
+        color: AppTheme.success.withValues(alpha: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_offer_rounded,
+                  size: 16, color: AppTheme.success),
+              const SizedBox(width: 6),
+              Text(l10n.t('offers_applied'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppTheme.success)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final promo in state.appliedPromos)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                      child: Text(promo.label,
+                          style: const TextStyle(fontSize: 12))),
+                  Text('-${Money.format(promo.amount)}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.success)),
+                ],
+              ),
+            ),
         ],
       ),
     );

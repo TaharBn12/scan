@@ -29,7 +29,14 @@ import '../../features/expenses/presentation/pages/expenses_page.dart';
 import '../../features/inventory/presentation/pages/purchases_page.dart';
 import '../../features/inventory/presentation/pages/new_purchase_page.dart';
 import '../../features/inventory/presentation/pages/stock_movements_page.dart';
+import '../../features/inventory/presentation/pages/expiry_page.dart';
 import '../../features/labels/presentation/pages/labels_page.dart';
+import '../../features/product/presentation/pages/dead_stock_page.dart';
+import '../../features/billing/domain/entities/promotion.dart';
+import '../../features/promotions/presentation/pages/promotions_page.dart';
+import '../../features/promotions/presentation/pages/promotion_form_page.dart';
+import '../../features/sales/domain/entities/sale.dart';
+import '../../features/sales/presentation/pages/return_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
 import '../../features/users/presentation/pages/lock_page.dart';
 
@@ -103,6 +110,21 @@ final router = GoRouter(
       builder: (context, state) => const SearchPage(),
     ),
     GoRoute(
+      path: '/promotions',
+      builder: (context, state) => const PromotionsPage(),
+      routes: [
+        GoRoute(
+          path: 'form',
+          builder: (context, state) =>
+              PromotionFormPage(existing: state.extra as Promotion?),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/returns/new',
+      builder: (context, state) => ReturnPage(sale: state.extra as Sale),
+    ),
+    GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsPage(),
     ),
@@ -130,6 +152,10 @@ final router = GoRouter(
         GoRoute(
           path: 'low-stock',
           builder: (context, state) => const LowStockPage(),
+        ),
+        GoRoute(
+          path: 'dead-stock',
+          builder: (context, state) => const DeadStockPage(),
         ),
         GoRoute(
           path: 'movements/:id',
@@ -178,6 +204,10 @@ final router = GoRouter(
         GoRoute(
           path: 'stocktake',
           builder: (context, state) => const StockTakePage(),
+        ),
+        GoRoute(
+          path: 'expiry',
+          builder: (context, state) => const ExpiryPage(),
         ),
       ],
     ),

@@ -182,11 +182,19 @@ class PdfHelper {
                     .toList(),
               ),
               pw.SizedBox(height: 8),
-              if (sale.discountAmount > 0) ...[
+              if (sale.discountAmount > 0 || sale.promoDiscount > 0) ...[
                 kv(l10n.subtotal, Money.format(sale.subtotal)),
-                kv(l10n.discount, '-${Money.format(sale.discountAmount)}'),
+                if (sale.discountAmount > 0)
+                  kv(l10n.discount, '-${Money.format(sale.discountAmount)}'),
+                if (sale.promoDiscount > 0)
+                  kv(l10n.t('offers_discount'),
+                      '-${Money.format(sale.promoDiscount)}'),
               ],
               kv(l10n.total, Money.format(sale.total), bold: true, size: 13),
+              if (sale.hasReturns)
+                kv(l10n.t('effective_total'),
+                    Money.format(sale.effectiveTotal),
+                    bold: true),
               kv(l10n.t('payment_method'), l10n.t(sale.paymentMethod.labelKey)),
               if (sale.isCredit) ...[
                 kv(l10n.t('paid_amount'), Money.format(sale.amountPaid)),
@@ -216,6 +224,23 @@ class PdfHelper {
               ],
               pw.Spacer(),
               pw.Divider(),
+              if (sale.number > 0) ...[
+                pw.Center(
+                  child: pw.BarcodeWidget(
+                    barcode: pw.Barcode.qrCode(),
+                    data: sale.qrPayload,
+                    width: 58,
+                    height: 58,
+                  ),
+                ),
+                pw.SizedBox(height: 2),
+                pw.Center(
+                  child: pw.Text(l10n.t('scan_to_return'),
+                      style: const pw.TextStyle(
+                          fontSize: 7, color: PdfColors.grey700)),
+                ),
+                pw.SizedBox(height: 6),
+              ],
               pw.Center(
                 child: pw.Text(
                     shop.footerText.isNotEmpty
@@ -271,11 +296,23 @@ class PdfHelper {
           '${i.productName}  ${formatQty(i.quantity)} ${l10n.t(i.unit.shortKey)} x ${Money.format(i.unitPrice)} = ${Money.format(i.lineTotal)}');
     }
     b.writeln('------------------------');
-    if (sale.discountAmount > 0) {
+    if (sale.discountAmount > 0 || sale.promoDiscount > 0) {
       b.writeln('${l10n.subtotal}: ${Money.format(sale.subtotal)}');
-      b.writeln('${l10n.discount}: -${Money.format(sale.discountAmount)}');
+      if (sale.discountAmount > 0) {
+        b.writeln('${l10n.discount}: -${Money.format(sale.discountAmount)}');
+      }
+      if (sale.promoDiscount > 0) {
+        b.writeln(
+            '${l10n.t('offers_discount')}: -${Money.format(sale.promoDiscount)}');
+      }
     }
     b.writeln('${l10n.total}: ${Money.format(sale.total)}');
+    if (sale.hasReturns) {
+      b.writeln(
+          '${l10n.t('returns_section')}: -${Money.format(sale.returnedAmount)}');
+      b.writeln(
+          '${l10n.t('effective_total')}: ${Money.format(sale.effectiveTotal)}');
+    }
     b.writeln(
         '${l10n.t('payment_method')}: ${l10n.t(sale.paymentMethod.labelKey)}');
     if (sale.isCredit) {

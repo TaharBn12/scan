@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
@@ -10,6 +11,7 @@ import '../bloc/sale_bloc.dart';
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
@@ -362,8 +364,25 @@ class _InvoicePageState extends State<InvoicePage> {
         color: AppTheme.success);
   }
 
+  /// Opens the goods-return picker and adopts the updated invoice on return.
+  Future<void> _openReturns() async {
+    final updated =
+        await context.push<Sale>('/returns/new', extra: _sale);
+    if (updated != null && mounted) {
+      setState(() => _sale = updated);
+    }
+  }
+
   Future<void> _confirmRefund() async {
     final l10n = context.l10n;
+    // Refunding money out of the drawer is manager territory unless the
+    // person holding the phone already is one.
+    final approved = await ManagerApproval.request(
+      context,
+      reasonKey: 'approval_reason_refund',
+      reasonArgs: {'amount': Money.format(_sale.effectiveTotal)},
+    );
+    if (!approved || !mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
@@ -402,10 +421,16 @@ class _InvoicePageState extends State<InvoicePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isAdmin = sessionController.isAdmin;
-    final canRecordPayment =
-        !_isDraft && _sale.isCredit && !_sale.isPaid && !_sale.isRefunded;
-    final canRefund = !_isDraft && !_sale.isRefunded && isAdmin;
+    final canRecordPayment = !_isDraft &&
+        _sale.isCredit &&
+        !_sale.isPaid &&
+        !_sale.isRefunded &&
+        _sale.amountDue > 0;
+    final canRefund =
+        !_isDraft && !_sale.isRefunded && !_sale.isFullyReturned;
+    final canReturn = !_isDraft &&
+        !_sale.isRefunded &&
+        _sale.items.any((i) => _sale.returnableQuantity(i) > 0);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -458,7 +483,7 @@ class _InvoicePageState extends State<InvoicePage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _ReceiptCard(sale: _sale, shop: _shop()),
+            _ReceiptCard(sale: _sale, shop: _shop(), showQr: !_isDraft),
             if (canRecordPayment) ...[
               const SizedBox(height: 16),
               SizedBox(
@@ -474,6 +499,21 @@ class _InvoicePageState extends State<InvoicePage> {
                   icon: const Icon(Icons.payments_outlined),
                   label: Text(
                       '${l10n.t('record_payment')} · ${Money.format(_sale.amountDue)}'),
+                ),
+              ),
+            ],
+            if (canReturn) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                  onPressed: _openReturns,
+                  icon: const Icon(Icons.assignment_return_outlined),
+                  label: Text(l10n.t('return_items')),
                 ),
               ),
             ],
@@ -547,7 +587,11 @@ class _InvoicePageState extends State<InvoicePage> {
 class _ReceiptCard extends StatelessWidget {
   final Sale sale;
   final Shop shop;
-  const _ReceiptCard({required this.sale, required this.shop});
+  /// The QR only makes sense once the invoice exists in the records (a
+  /// draft's id is still private to this screen).
+  final bool showQr;
+  const _ReceiptCard(
+      {required this.sale, required this.shop, this.showQr = false});
 
   @override
   Widget build(BuildContext context) {
@@ -709,10 +753,20 @@ class _ReceiptCard extends StatelessWidget {
             ),
           const Divider(height: 24),
           // Totals
-          if (sale.discountAmount > 0) ...[
+          if (sale.discountAmount > 0 || sale.promoDiscount > 0) ...[
             _kv(l10n.subtotal, Money.format(sale.subtotal), muted: muted),
-            _kv(l10n.discount, '- ${Money.format(sale.discountAmount)}',
-                muted: muted, valueColor: AppTheme.success),
+            if (sale.discountAmount > 0)
+              _kv(l10n.discount, '- ${Money.format(sale.discountAmount)}',
+                  muted: muted, valueColor: AppTheme.success),
+            if (sale.promoDiscount > 0)
+              _kv(
+                sale.promoDescription.isEmpty
+                    ? l10n.t('offers_discount')
+                    : '${l10n.t('offers_discount')} (${sale.promoDescription})',
+                '- ${Money.format(sale.promoDiscount)}',
+                muted: muted,
+                valueColor: AppTheme.success,
+              ),
             const SizedBox(height: 4),
           ],
           Row(
@@ -765,6 +819,34 @@ class _ReceiptCard extends StatelessWidget {
             Text(l10n.t('note_label', {'note': sale.note}),
                 style: TextStyle(fontSize: 12, color: muted)),
           ],
+          if (sale.hasReturns) ...[
+            const Divider(height: 24),
+            _ReturnsSection(sale: sale, muted: muted),
+          ],
+          if (showQr) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: muted.withValues(alpha: 0.3)),
+                ),
+                child: SizedBox(
+                  width: 92,
+                  height: 92,
+                  child: PrettyQrView.data(sale.qrPayload),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.t('scan_to_return'),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10.5, color: muted),
+            ),
+          ],
           if (shop.upiId.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(shop.upiId,
@@ -814,6 +896,12 @@ class _StatusChip extends StatelessWidget {
     if (sale.isRefunded) {
       text = l10n.t('refunded');
       color = Colors.grey;
+    } else if (sale.isFullyReturned) {
+      text = l10n.t('fully_returned');
+      color = Colors.grey;
+    } else if (sale.hasReturns) {
+      text = l10n.t('partially_returned');
+      color = AppTheme.info;
     } else if (sale.isCredit && !sale.isPaid) {
       if (sale.amountPaid > 0) {
         text = l10n.t('partially_paid');
@@ -836,6 +924,84 @@ class _StatusChip extends StatelessWidget {
       child: Text(text,
           style: TextStyle(
               color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+/// What came back on this invoice: each return with its lines and the money
+/// handed back, plus the effective total the invoice is still worth.
+class _ReturnsSection extends StatelessWidget {
+  final Sale sale;
+  final Color muted;
+  const _ReturnsSection({required this.sale, required this.muted});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.assignment_return_outlined, size: 16, color: muted),
+            const SizedBox(width: 6),
+            Text(l10n.t('returns_section'),
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: muted)),
+            const Spacer(),
+            Text('-${Money.format(sale.returnedAmount)}',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.danger)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final ret in sale.returns) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(dateFmt.format(ret.dateTime),
+                  style: TextStyle(fontSize: 11, color: muted)),
+              if ((ret.processedByName ?? '').isNotEmpty)
+                Text(ret.processedByName!,
+                    style: TextStyle(fontSize: 11, color: muted)),
+            ],
+          ),
+          for (final line in ret.lines)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${line.productName} × ${formatQty(line.quantity)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  Text('-${Money.format(sale.returnValue(SaleReturn(id: ret.id, dateTime: ret.dateTime, lines: [line])))}',
+                      style: TextStyle(
+                          fontSize: 12, color: muted)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(l10n.t('effective_total'),
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(Money.format(sale.effectiveTotal),
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor)),
+          ],
+        ),
+      ],
     );
   }
 }

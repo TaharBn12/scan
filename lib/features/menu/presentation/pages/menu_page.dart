@@ -5,10 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/daily_goal.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../billing/data/held_cart_store.dart';
 import '../../../expenses/presentation/bloc/expense_bloc.dart';
+import '../../../inventory/domain/expiry_tracker.dart';
+import '../../../inventory/presentation/bloc/inventory_bloc.dart';
+import '../../../product/domain/dead_stock_advisor.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
 import '../../../shifts/data/shift_store.dart';
@@ -160,6 +164,57 @@ class MenuPage extends StatelessWidget {
                           subtitle: l10n.t('stock_take_subtitle'),
                           color: const Color(0xFF0891B2),
                           onTap: () => context.push('/inventory/stocktake'),
+                        ),
+                        if (canStock)
+                          _ActionCard(
+                            icon: Icons.local_offer_rounded,
+                            label: l10n.t('promotions'),
+                            subtitle: l10n.t('promotions_subtitle'),
+                            color: const Color(0xFF16A34A),
+                            onTap: () => context.push('/promotions'),
+                          ),
+                        if (sessionController.canManageInventory)
+                          BlocBuilder<InventoryBloc, InventoryState>(
+                          builder: (context, inventory) {
+                            return BlocBuilder<ProductBloc, ProductState>(
+                              builder: (context, products) {
+                                final due = ExpiryTracker.analyze(
+                                        products.products, inventory.purchases)
+                                    .where((b) =>
+                                        b.daysLeft(DateTime.now()) <= 7)
+                                    .length;
+                                return _ActionCard(
+                                  icon: Icons.hourglass_bottom_rounded,
+                                  label: l10n.t('expiry_title'),
+                                  subtitle: l10n.t('expiry_subtitle'),
+                                  color: const Color(0xFFDC2626),
+                                  badge: due,
+                                  onTap: () => context.push('/inventory/expiry'),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        if (canStock)
+                          BlocBuilder<SaleBloc, SaleState>(
+                          builder: (context, sales) {
+                            return BlocBuilder<ProductBloc, ProductState>(
+                              builder: (context, products) {
+                                final dead = DeadStockAdvisor.analyze(
+                                        products.products, sales.sales)
+                                    .length;
+                                return _ActionCard(
+                                  icon: Icons.ac_unit_rounded,
+                                  label: l10n.t('dead_stock_title'),
+                                  subtitle: l10n.t('dead_stock_subtitle'),
+                                  color: const Color(0xFF2563EB),
+                                  badge: dead,
+                                  onTap: () =>
+                                      context.push('/products/dead-stock'),
+                                );
+                              },
+                            );
+                          },
                         ),
                         if (canCustomers)
                           BlocBuilder<SaleBloc, SaleState>(
@@ -317,6 +372,7 @@ class _TodayHeadline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final goal = DailyGoal.value;
     return BlocBuilder<SaleBloc, SaleState>(
       builder: (context, state) {
         final user = sessionController.currentUser;
@@ -350,6 +406,10 @@ class _TodayHeadline extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (goal > 0) ...[
+                    const SizedBox(height: 8),
+                    _GoalProgress(goal: goal, today: state.todayTotal),
+                  ],
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -385,6 +445,52 @@ class _TodayHeadline extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Live progress toward the daily target, right under today's number.
+class _GoalProgress extends StatelessWidget {
+  final double goal;
+  final double today;
+  const _GoalProgress({required this.goal, required this.today});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final ratio = goal <= 0 ? 0.0 : (today / goal).clamp(0.0, 1.0);
+    final percent = goal <= 0 ? 0 : (today / goal * 100).floor();
+    final reached = today >= goal;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: SizedBox(
+            height: 7,
+            child: LinearProgressIndicator(
+              value: ratio,
+              backgroundColor: Colors.white.withValues(alpha: 0.22),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                  reached ? const Color(0xFF34D399) : Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          reached
+              ? l10n.t('daily_goal_reached')
+              : l10n.t('daily_goal_progress', {
+                  'percent': percent,
+                  'goal': Money.format(goal),
+                }),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.9),
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 }

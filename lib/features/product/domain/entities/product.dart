@@ -41,6 +41,10 @@ class Product extends Equatable {
   final ProductUnit unit;
   final bool trackStock; // false = never warn / never decrement
   final DateTime? updatedAt; // for sync conflict resolution (last-write-wins)
+  /// Wholesale price charged automatically once the quantity reaches
+  /// [wholesaleMinQty] in one sale. 0 = the product has no wholesale tier.
+  final double wholesalePrice;
+  final double wholesaleMinQty;
 
   const Product({
     required this.id,
@@ -55,6 +59,8 @@ class Product extends Equatable {
     this.unit = ProductUnit.piece,
     this.trackStock = true,
     this.updatedAt,
+    this.wholesalePrice = 0,
+    this.wholesaleMinQty = 0,
   });
 
   bool get isLowStock =>
@@ -64,6 +70,16 @@ class Product extends Equatable {
 
   /// Profit per unit at the current prices (0 when cost is unknown).
   double get unitMargin => costPrice <= 0 ? 0 : price - costPrice;
+
+  /// True when a wholesale tier is configured on this product.
+  bool get hasWholesale => wholesalePrice > 0 && wholesaleMinQty > 0;
+
+  /// True when [qty] reaches the wholesale tier.
+  bool isWholesaleQty(double qty) => hasWholesale && qty >= wholesaleMinQty;
+
+  /// The price the till should charge for [qty] when nobody typed a custom
+  /// price: the wholesale tier kicks in automatically.
+  double priceFor(double qty) => isWholesaleQty(qty) ? wholesalePrice : price;
 
   Product copyWith({
     String? id,
@@ -78,6 +94,8 @@ class Product extends Equatable {
     ProductUnit? unit,
     bool? trackStock,
     DateTime? updatedAt,
+    double? wholesalePrice,
+    double? wholesaleMinQty,
   }) {
     return Product(
       id: id ?? this.id,
@@ -92,6 +110,8 @@ class Product extends Equatable {
       unit: unit ?? this.unit,
       trackStock: trackStock ?? this.trackStock,
       updatedAt: updatedAt ?? this.updatedAt,
+      wholesalePrice: wholesalePrice ?? this.wholesalePrice,
+      wholesaleMinQty: wholesaleMinQty ?? this.wholesaleMinQty,
     );
   }
 
@@ -108,6 +128,8 @@ class Product extends Equatable {
         'unit': unit.name,
         'trackStock': trackStock,
         'updatedAt': updatedAt?.toIso8601String(),
+        'wholesalePrice': wholesalePrice,
+        'wholesaleMinQty': wholesaleMinQty,
       };
 
   factory Product.fromMap(Map map) => Product(
@@ -125,6 +147,8 @@ class Product extends Equatable {
         updatedAt: map['updatedAt'] != null
             ? DateTime.tryParse(map['updatedAt'] as String)
             : null,
+        wholesalePrice: (map['wholesalePrice'] as num?)?.toDouble() ?? 0,
+        wholesaleMinQty: (map['wholesaleMinQty'] as num?)?.toDouble() ?? 0,
       );
 
   @override
@@ -141,5 +165,7 @@ class Product extends Equatable {
         unit,
         trackStock,
         updatedAt,
+        wholesalePrice,
+        wholesaleMinQty,
       ];
 }

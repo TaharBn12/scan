@@ -7,6 +7,12 @@ import 'package:billing_app/core/security/auth_helper.dart';
 import 'package:billing_app/core/utils/cash_change.dart';
 import 'package:billing_app/core/utils/search_text.dart';
 import 'package:billing_app/features/billing/data/held_cart_store.dart';
+import 'package:billing_app/features/billing/domain/entities/cart_item.dart';
+import 'package:billing_app/features/billing/domain/entities/promotion.dart';
+import 'package:billing_app/features/billing/domain/promo_engine.dart';
+import 'package:billing_app/features/inventory/domain/entities/purchase.dart';
+import 'package:billing_app/features/inventory/domain/expiry_tracker.dart';
+import 'package:billing_app/features/product/domain/dead_stock_advisor.dart';
 import 'package:billing_app/features/product/domain/reorder_advisor.dart';
 import 'package:billing_app/features/shifts/data/shift_store.dart';
 import 'package:billing_app/features/users/domain/entities/app_user.dart';
@@ -387,6 +393,325 @@ void main() {
       expect(role.canChangeSettings, isFalse);
     });
 
+  });
+
+  group('Wholesale pricing', () {
+    const product = Product(
+      id: 'w1',
+      name: 'Oil 5L',
+      barcode: '55',
+      price: 1500,
+      wholesalePrice: 1350,
+      wholesaleMinQty: 4,
+    );
+
+    test('retail below the tier, wholesale at and above it', () {
+      expect(product.hasWholesale, isTrue);
+      expect(product.priceFor(1), 1500);
+      expect(product.priceFor(3.99), 1500);
+      expect(product.priceFor(4), 1350);
+      expect(product.priceFor(40), 1350);
+    });
+
+    test('no tier configured always charges retail', () {
+      const plain = Product(id: 'w2', name: 'Tea', barcode: '56', price: 200);
+      expect(plain.hasWholesale, isFalse);
+      expect(plain.priceFor(99), 200);
+    });
+
+    test('cart item follows the auto price unless the cashier typed one', () {
+      final auto = CartItem(product: product, quantity: 5);
+      expect(auto.unitPrice, 1350);
+      expect(auto.priceOverridden, isFalse);
+      expect(auto.isWholesalePriced, isTrue);
+
+      final haggled = CartItem(product: product, quantity: 5, unitPrice: 1400);
+      expect(haggled.priceOverridden, isTrue);
+      expect(haggled.isWholesalePriced, isFalse);
+    });
+  });
+
+  group('Promo engine', () {
+    const oil = Product(
+        id: 'p1', name: 'Oil', barcode: '1', price: 100, category: 'Food');
+    const milk = Product(
+        id: 'p2', name: 'Milk', barcode: '2', price: 60, unit: ProductUnit.l);
+    CartItem line(Product p, double qty) => CartItem(product: p, quantity: qty);
+
+    test('pay X take Y discounts full groups only', () {
+      const promo = Promotion(
+          id: 'pr1',
+          name: '2+1',
+          productId: 'p1',
+          type: PromoType.buyXPayY,
+          payQty: 2,
+          getQty: 3);
+      final result =
+          PromoEngine.compute([line(oil, 7)], [promo], now: DateTime(2026, 9, 9));
+      // 2 full groups of 3 → 2 free units × 100
+      expect(result.total, 200);
+      expect(result.lines.single.promotionId, 'pr1');
+    });
+
+    test('buyXPayY never applies to weighed units', () {
+      const promo = Promotion(
+          id: 'pr2',
+          name: 'milk deal',
+          productId: 'p2',
+          type: PromoType.buyXPayY,
+          payQty: 2,
+          getQty: 3);
+      final result =
+          PromoEngine.compute([line(milk, 6)], [promo], now: DateTime(2026, 9, 9));
+      expect(result.total, 0);
+      expect(result.lines, isEmpty);
+    });
+
+    test('percent off a category hits every line in it', () {
+      const promo = Promotion(
+          id: 'pr3',
+          name: 'food -10%',
+          category: 'Food',
+          type: PromoType.percentOff,
+          percent: 10);
+      final result = PromoEngine.compute(
+          [line(oil, 2), line(milk, 1)], [promo],
+          now: DateTime(2026, 9, 9));
+      expect(result.total, closeTo(20, 0.0001)); // 10% of 200; milk is not Food
+    });
+
+    test('a product offer beats the category one for the same line', () {
+      const byProduct = Promotion(
+          id: 'pr4',
+          name: 'oil -20%',
+          productId: 'p1',
+          type: PromoType.percentOff,
+          percent: 20);
+      const byCategory = Promotion(
+          id: 'pr5',
+          name: 'food -10%',
+          category: 'Food',
+          type: PromoType.percentOff,
+          percent: 10);
+      final result = PromoEngine.compute(
+          [line(oil, 1)], [byCategory, byProduct],
+          now: DateTime(2026, 9, 9));
+      expect(result.lines.single.promotionId, 'pr4');
+      expect(result.total, closeTo(20, 0.0001));
+    });
+
+    test('inactive or out-of-window offers stay silent', () {
+      final inactive = const Promotion(
+          id: 'pr6',
+          name: 'off',
+          productId: 'p1',
+          type: PromoType.percentOff,
+          percent: 50,
+          active: false);
+      final future = Promotion(
+          id: 'pr7',
+          name: 'later',
+          productId: 'p1',
+          type: PromoType.percentOff,
+          percent: 50,
+          startAt: DateTime(2027, 1, 1));
+      expect(
+          PromoEngine.compute([line(oil, 1)], [inactive, future],
+              now: DateTime(2026, 9, 9))
+              .total,
+          0);
+      expect(Promotion.fromMap(future.toMap()).startAt, DateTime(2027, 1, 1));
+    });
+  });
+
+  group('Goods returns on invoices', () {
+    Sale sample() => Sale(
+          id: 's-ret',
+          number: 42,
+          dateTime: DateTime(2026, 9, 1, 10),
+          items: const [
+            SaleItem(
+                productId: 'a', productName: 'A', unitPrice: 100, unitCost: 80, quantity: 4),
+            SaleItem(
+                productId: 'b', productName: 'B', unitPrice: 50, unitCost: 40, quantity: 2),
+          ],
+          subtotal: 500,
+          discountAmount: 50,
+          total: 450,
+          paymentMethod: PaymentMethod.cash,
+        );
+
+    SaleReturn ret(String productId, String name, double qty, double price,
+            double cost) =>
+        SaleReturn(
+          id: 'r-$qty',
+          dateTime: DateTime(2026, 9, 5, 12),
+          lines: [
+            SaleReturnLine(
+                productId: productId,
+                productName: name,
+                unitPrice: price,
+                unitCost: cost,
+                quantity: qty)
+          ],
+          processedByName: 'Sara',
+        );
+
+    test('the refund is discount-allocated, not the sticker price', () {
+      final updated = sample().withReturn(ret('a', 'A', 2, 100, 80));
+      // factor = 450/500 = 0.9 → refund = 2 × 100 × 0.9
+      expect(updated.returnedAmount, closeTo(180, 0.0001));
+      expect(updated.effectiveTotal, closeTo(270, 0.0001));
+      expect(updated.returnedProfit, closeTo(36, 0.0001));
+      expect(updated.effectiveProfit, closeTo(84, 0.0001));
+    });
+
+    test('stacked returns shrink the returnable quantity', () {
+      var sale = sample().withReturn(ret('a', 'A', 1, 100, 80));
+      sale = sale.withReturn(ret('a', 'A', 2, 100, 80));
+      expect(sale.returnedQuantityOf('a'), 3);
+      expect(sale.returnableQuantity(sale.items.first), 1);
+      expect(sale.isFullyReturned, isFalse);
+    });
+
+    test('returning everything marks the invoice fully returned', () {
+      var sale = sample().withReturn(ret('a', 'A', 4, 100, 80));
+      sale = sale.withReturn(ret('b', 'B', 2, 50, 40));
+      expect(sale.effectiveTotal, closeTo(0, 0.0001));
+      expect(sale.isFullyReturned, isTrue);
+    });
+
+    test('returns lower what a credit customer still owes', () {
+      final creditSale = Sale(
+        id: 's-cred',
+        dateTime: DateTime(2026, 9, 1),
+        items: const [
+          SaleItem(
+              productId: 'a', productName: 'A', unitPrice: 100, quantity: 3)
+        ],
+        subtotal: 300,
+        discountAmount: 0,
+        total: 300,
+        paymentMethod: PaymentMethod.credit,
+        isPaid: false,
+        payments: [
+          SalePayment(amount: 100, dateTime: DateTime(2026, 9, 2)),
+        ],
+      );
+      expect(creditSale.amountDue, 200);
+      final updated = creditSale.withReturn(ret('a', 'A', 1, 100, 90));
+      expect(updated.amountDue, closeTo(200 - 100, 0.0001));
+    });
+
+    test('returns round-trip through toMap/fromMap', () {
+      final sale = sample().withReturn(ret('a', 'A', 1.5, 100, 80));
+      final copy = Sale.fromMap(sale.toMap());
+      expect(copy.returns.length, 1);
+      expect(copy.returns.first.lines.single.quantity, 1.5);
+      expect(copy.returnedAmount, closeTo(sale.returnedAmount, 0.0001));
+      expect(copy.returns.first.processedByName, 'Sara');
+    });
+
+    test('the QR payload round-trips to the sale id', () {
+      final sale = sample();
+      expect(Sale.saleIdFromScan(sale.qrPayload), sale.id);
+      expect(Sale.saleIdFromScan('6191234567890'), isNull);
+    });
+  });
+
+  group('Expiry tracker (FEFO)', () {
+    Purchase lot(String product, double qty, DateTime expiry, String id,
+            {double cost = 50}) =>
+        Purchase(
+          id: id,
+          dateTime: DateTime(2026, 8, 1),
+          items: [
+            PurchaseItem(
+                productId: product,
+                productName: product,
+                quantity: qty,
+                unitCost: cost,
+                expiryDate: expiry)
+          ],
+        );
+
+    test('the shelves keep the latest-expiry batches', () {
+      const yogurt = Product(
+          id: 'y', name: 'Yogurt', barcode: '9', price: 60, stock: 7);
+      final soon = lot('y', 5, DateTime(2026, 9, 10), 'lot-old');
+      final later = lot('y', 5, DateTime(2026, 9, 25), 'lot-new');
+      final batches = ExpiryTracker.analyze(
+          [yogurt], [soon, later]);
+      expect(batches.length, 2);
+      // 7 in stock: the 5 of the newest lot + 2 of the expiring one.
+      final expiring = batches.firstWhere((b) => b.purchaseId == 'lot-old');
+      expect(expiring.quantityOnHand, 2);
+      final fresh = batches.firstWhere((b) => b.purchaseId == 'lot-new');
+      expect(fresh.quantityOnHand, 5);
+      expect(expiring.daysLeft(DateTime(2026, 9, 9)), 1);
+      expect(expiring.valueAtRisk(0), closeTo(100, 0.0001));
+    });
+
+    test('stock fully consumed leaves nothing at risk', () {
+      const gone = Product(
+          id: 'g', name: 'Gone', barcode: '8', price: 30, stock: 0);
+      final batches = ExpiryTracker.analyze(
+          [gone], [lot('g', 10, DateTime(2026, 9, 15), 'lot-g')]);
+      expect(batches, isEmpty);
+    });
+  });
+
+  group('Dead stock advisor', () {
+    test('flags silent sellers by frozen capital, never-sold included', () {
+      final now = DateTime(2026, 9, 9);
+      const stale = Product(
+          id: 'd1',
+          name: 'Old tea',
+          barcode: '1',
+          price: 300,
+          costPrice: 200,
+          stock: 10);
+      const fresh = Product(
+          id: 'd2', name: 'Hot cake', barcode: '2', price: 50, stock: 5);
+      const ghost = Product(
+          id: 'd3', name: 'Mystery', barcode: '3', price: 100, stock: 2);
+      final sales = [
+        Sale(
+          id: 'sold',
+          dateTime: now.subtract(const Duration(days: 3)),
+          items: const [
+            SaleItem(productId: 'd2', productName: 'Hot cake', unitPrice: 50, quantity: 1)
+          ],
+          subtotal: 50,
+          discountAmount: 0,
+          total: 50,
+          paymentMethod: PaymentMethod.cash,
+        ),
+        Sale(
+          id: 'old-sold',
+          dateTime: now.subtract(const Duration(days: 45)),
+          items: const [
+            SaleItem(productId: 'd1', productName: 'Old tea', unitPrice: 300, quantity: 1)
+          ],
+          subtotal: 300,
+          discountAmount: 0,
+          total: 300,
+          paymentMethod: PaymentMethod.cash,
+        ),
+      ];
+      final dead = DeadStockAdvisor.analyze([stale, fresh, ghost], sales,
+          now: now, minDays: 30);
+      expect(dead.map((d) => d.product.id).toSet(), {'d1', 'd3'});
+      final tea = dead.firstWhere((d) => d.product.id == 'd1');
+      expect(tea.daysSinceSale, 45);
+      expect(tea.frozenCapital, 2000); // 10 × 200 (at cost)
+      expect(tea.clearancePrice, closeTo(210, 0.0001));
+      expect(dead.firstWhere((d) => d.product.id == 'd3').daysSinceSale,
+          isNull);
+    });
+  });
+
+  group('user maps', () {
     test('user maps keep the account fields', () {
       final user = AppUser(
         id: 'u1',

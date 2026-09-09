@@ -78,11 +78,13 @@ class SaleState extends Equatable {
 
   List<Sale> get salesInPeriod => salesIn(selectedRange);
 
+  // Revenue/profit always use the *effective* figures: what the invoice is
+  // still worth after goods came back.
   double totalIn(DateRange r) =>
-      salesIn(r).fold(0.0, (sum, s) => sum + s.total);
+      salesIn(r).fold(0.0, (sum, s) => sum + s.effectiveTotal);
 
   double profitIn(DateRange r) =>
-      salesIn(r).fold(0.0, (sum, s) => sum + s.profit);
+      salesIn(r).fold(0.0, (sum, s) => sum + s.effectiveProfit);
 
   double get periodTotal => totalIn(selectedRange);
   double get periodProfit => profitIn(selectedRange);
@@ -93,12 +95,25 @@ class SaleState extends Equatable {
       periodCount == 0 ? 0 : periodTotal / periodCount;
   double get periodDiscounts =>
       salesInPeriod.fold(0.0, (sum, s) => sum + s.discountAmount);
-  double get periodRefunds => sales
-      .where((s) => s.isRefunded && selectedRange.contains(s.dateTime))
-      .fold(0.0, (sum, s) => sum + s.total);
+
+  /// Money given back in the period: fully refunded invoices plus the
+  /// partial returns recorded on still-active ones.
+  double get periodRefunds {
+    double sum = 0;
+    for (final s in sales) {
+      if (!selectedRange.contains(s.dateTime)) continue;
+      if (s.isRefunded) {
+        sum += s.total;
+      } else {
+        sum += s.returnedAmount;
+      }
+    }
+    return sum;
+  }
 
   /// Cash actually collected in the period: cash sales + payments received
-  /// on credit sales (whenever those sales happened).
+  /// on credit sales (whenever those sales happened), minus cash handed
+  /// back for returns processed in the period.
   double get periodCashCollected {
     final r = selectedRange;
     double sum = 0;
@@ -107,8 +122,13 @@ class SaleState extends Equatable {
         for (final p in s.payments) {
           if (r.contains(p.dateTime)) sum += p.amount;
         }
-      } else if (r.contains(s.dateTime)) {
-        sum += s.total;
+      } else {
+        if (r.contains(s.dateTime)) sum += s.effectiveTotal;
+        for (final ret in s.returns) {
+          if (r.contains(ret.dateTime) && !r.contains(s.dateTime)) {
+            sum -= s.returnValue(ret);
+          }
+        }
       }
     }
     return sum;
@@ -116,7 +136,7 @@ class SaleState extends Equatable {
 
   double get periodCreditGiven => salesInPeriod
       .where((s) => s.isCredit)
-      .fold(0.0, (sum, s) => sum + s.total);
+      .fold(0.0, (sum, s) => sum + s.effectiveTotal);
 
   // ------------------------------------------------------ legacy quick stats
 
@@ -146,7 +166,8 @@ class SaleState extends Equatable {
 
   // -------------------------------------------------------------- breakdowns
 
-  /// Top-selling products by quantity within the selected period.
+  /// Top-selling products by quantity within the selected period
+  /// (returned goods are subtracted — they aren't really sold).
   List<MapEntry<String, double>> get topProducts {
     final Map<String, double> qtyByName = {};
     for (final sale in salesInPeriod) {
@@ -154,8 +175,14 @@ class SaleState extends Equatable {
         qtyByName[item.productName] =
             (qtyByName[item.productName] ?? 0) + item.quantity;
       }
+      for (final ret in sale.returns) {
+        for (final line in ret.lines) {
+          qtyByName[line.productName] =
+              (qtyByName[line.productName] ?? 0) - line.quantity;
+        }
+      }
     }
-    final entries = qtyByName.entries.toList()
+    final entries = qtyByName.entries.where((e) => e.value > 0).toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return entries.take(5).toList();
   }
@@ -168,8 +195,15 @@ class SaleState extends Equatable {
         byName[item.productName] =
             (byName[item.productName] ?? 0) + item.lineTotal;
       }
+      for (final ret in sale.returns) {
+        final factor = sale.subtotal > 0 ? sale.total / sale.subtotal : 1.0;
+        for (final line in ret.lines) {
+          byName[line.productName] =
+              (byName[line.productName] ?? 0) - line.lineTotal * factor;
+        }
+      }
     }
-    final entries = byName.entries.toList()
+    final entries = byName.entries.where((e) => e.value > 0).toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return entries.take(5).toList();
   }
@@ -177,7 +211,7 @@ class SaleState extends Equatable {
   Map<PaymentMethod, double> get paymentBreakdown {
     final map = <PaymentMethod, double>{};
     for (final s in salesInPeriod) {
-      map[s.paymentMethod] = (map[s.paymentMethod] ?? 0) + s.total;
+      map[s.paymentMethod] = (map[s.paymentMethod] ?? 0) + s.effectiveTotal;
     }
     return map;
   }
@@ -212,7 +246,7 @@ class SaleState extends Equatable {
     final map = <String, double>{};
     for (final s in salesInPeriod) {
       final key = (s.cashierName ?? '').isEmpty ? '-' : s.cashierName!;
-      map[key] = (map[key] ?? 0) + s.total;
+      map[key] = (map[key] ?? 0) + s.effectiveTotal;
     }
     return map;
   }

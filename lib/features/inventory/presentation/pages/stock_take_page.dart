@@ -5,6 +5,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:vibration/vibration.dart';
 
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
@@ -147,6 +148,14 @@ class _StockTakePageState extends State<StockTakePage> {
           icon: Icons.check_circle_outline);
       return;
     }
+    // Correcting the book stock is exactly how theft hides — the manager
+    // signs off on it with their PIN when a non-admin is counting.
+    final approved = await ManagerApproval.request(
+      context,
+      reasonKey: 'approval_reason_stock',
+      reasonArgs: {'count': changes.length},
+    );
+    if (!approved || !mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

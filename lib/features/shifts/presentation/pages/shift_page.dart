@@ -177,6 +177,7 @@ class ShiftPage extends StatelessWidget {
       countedCash: counted,
       cashSales: totals.cashSales,
       creditCollected: totals.creditCollected,
+      returnsPaidOut: totals.returnsPaidOut,
       paidOut: totals.paidOut,
       invoiceCount: totals.invoiceCount,
       closedBy: sessionController.currentUser?.name,
@@ -208,6 +209,9 @@ class ShiftPage extends StatelessWidget {
               _ReportRow(l10n.t('cash_sales'), Money.format(shift.cashSales)),
               _ReportRow(l10n.t('credit_collected'),
                   Money.format(shift.creditCollected)),
+              if (shift.returnsPaidOut > 0)
+                _ReportRow(l10n.t('returns_paid_out'),
+                    '- ${Money.format(shift.returnsPaidOut)}'),
               _ReportRow(l10n.t('paid_out'), '- ${Money.format(shift.paidOut)}'),
               const Divider(height: 22),
               _ReportRow(l10n.t('expected_cash'),
@@ -255,6 +259,8 @@ class ShiftPage extends StatelessWidget {
       '${l10n.t('opening_float')}: ${Money.format(shift.openingFloat)}',
       '${l10n.t('cash_sales')}: ${Money.format(shift.cashSales)}',
       '${l10n.t('credit_collected')}: ${Money.format(shift.creditCollected)}',
+      if (shift.returnsPaidOut > 0)
+        '${l10n.t('returns_paid_out')}: -${Money.format(shift.returnsPaidOut)}',
       '${l10n.t('paid_out')}: -${Money.format(shift.paidOut)}',
       '${l10n.t('expected_cash')}: ${Money.format(shift.expectedCash)}',
       '${l10n.t('counted_cash')}: ${Money.format(shift.countedCash ?? 0)}',
@@ -295,6 +301,10 @@ class ShiftPage extends StatelessWidget {
         MapEntry('Opening float', Money.plain(shift.openingFloat)),
         MapEntry('Cash sales', Money.plain(shift.cashSales)),
         MapEntry('Credit collected', Money.plain(shift.creditCollected)),
+        // Goods handed back: cash that went out of the drawer.
+        if (shift.returnsPaidOut > 0)
+          MapEntry('Returns (cash out)',
+              '-${Money.plain(shift.returnsPaidOut)}'),
         MapEntry('Paid out', Money.plain(shift.paidOut)),
         MapEntry('Expected', Money.plain(shift.expectedCash)),
         MapEntry('Counted', Money.plain(shift.countedCash ?? 0)),
@@ -314,6 +324,7 @@ class ShiftPage extends StatelessWidget {
 class ShiftTotals {
   final double cashSales;
   final double creditCollected;
+  final double returnsPaidOut;
   final double paidOut;
   final int invoiceCount;
   final double openingFloat;
@@ -321,13 +332,14 @@ class ShiftTotals {
   const ShiftTotals({
     required this.cashSales,
     required this.creditCollected,
+    required this.returnsPaidOut,
     required this.paidOut,
     required this.invoiceCount,
     required this.openingFloat,
   });
 
   double get expectedCash =>
-      openingFloat + cashSales + creditCollected - paidOut;
+      openingFloat + cashSales + creditCollected - returnsPaidOut - paidOut;
 
   static ShiftTotals compute(
       Shift shift, SaleState sales, ExpenseState expenses) {
@@ -337,15 +349,25 @@ class ShiftTotals {
 
     double cash = 0;
     double collected = 0;
+    double returns = 0;
     int count = 0;
     for (final sale in sales.activeSales) {
       if (inWindow(sale.dateTime)) {
         count++;
-        if (!sale.isCredit) cash += sale.total;
+        if (!sale.isCredit) cash += sale.effectiveTotal;
       }
       if (sale.isCredit) {
         for (final payment in sale.payments) {
           if (inWindow(payment.dateTime)) collected += payment.amount;
+        }
+      }
+      // Cash handed back for returns *processed* during this shift, even
+      // when the original sale happened earlier.
+      if (!sale.isCredit) {
+        for (final ret in sale.returns) {
+          if (inWindow(ret.dateTime) && !inWindow(sale.dateTime)) {
+            returns += sale.returnValue(ret);
+          }
         }
       }
     }
@@ -353,6 +375,7 @@ class ShiftTotals {
     return ShiftTotals(
       cashSales: cash,
       creditCollected: collected,
+      returnsPaidOut: returns,
       paidOut: out,
       invoiceCount: count,
       openingFloat: shift.openingFloat,
@@ -502,6 +525,11 @@ class _OpenState extends StatelessWidget {
                         Money.format(totals.creditCollected),
                         Icons.account_balance_wallet_outlined,
                         color: AppTheme.info),
+                    if (totals.returnsPaidOut > 0)
+                      _Line(l10n.t('returns_paid_out'),
+                          '- ${Money.format(totals.returnsPaidOut)}',
+                          Icons.assignment_return_outlined,
+                          color: AppTheme.warning),
                     _Line(l10n.t('paid_out'),
                         '- ${Money.format(totals.paidOut)}',
                         Icons.receipt_long_outlined,

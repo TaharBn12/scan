@@ -46,6 +46,8 @@ class BackupHelper {
       'theme_accent',
       'compact_mode',
       'quick_sale_favorites',
+      'daily_goal',
+      'discount_limit_percent',
     ];
     final settings = <String, dynamic>{
       for (final k in settingKeys)
@@ -63,6 +65,7 @@ class BackupHelper {
       'purchases': dump(HiveDatabase.purchasesBox),
       'stockMovements': dump(HiveDatabase.stockMovementsBox),
       'users': dump(HiveDatabase.usersBox),
+      'promotions': dump(HiveDatabase.promotionsBox),
       'shop': shop,
       'settings': settings,
     };
@@ -208,6 +211,7 @@ class BackupHelper {
     await restore(decoded['purchases'], HiveDatabase.purchasesBox);
     await restore(decoded['stockMovements'], HiveDatabase.stockMovementsBox);
     await restore(decoded['users'], HiveDatabase.usersBox);
+    await restore(decoded['promotions'], HiveDatabase.promotionsBox);
 
     final shop = decoded['shop'];
     if (shop is Map) {

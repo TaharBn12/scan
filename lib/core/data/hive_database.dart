@@ -16,6 +16,7 @@ class HiveDatabase {
   static const String usersBoxName = 'users';
   static const String heldCartsBoxName = 'held_carts';
   static const String shiftsBoxName = 'shifts';
+  static const String promotionsBoxName = 'promotions';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -41,6 +42,8 @@ class HiveDatabase {
     await Hive.openBox(heldCartsBoxName);
     // Cash-drawer sessions (open float -> counted cash -> variance).
     await Hive.openBox(shiftsBoxName);
+    // Automatic price offers ("pay 2 take 3", category discounts...).
+    await Hive.openBox(promotionsBoxName);
 
     // Legacy: the app used to keep an outbox for the removed website /
     // cloud sync. Drop it so old installs stop carrying dead data.
@@ -65,4 +68,5 @@ class HiveDatabase {
   static Box get usersBox => Hive.box(usersBoxName);
   static Box get heldCartsBox => Hive.box(heldCartsBoxName);
   static Box get shiftsBox => Hive.box(shiftsBoxName);
+  static Box get promotionsBox => Hive.box(promotionsBoxName);
 }

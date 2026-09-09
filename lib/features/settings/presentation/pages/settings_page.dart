@@ -11,12 +11,15 @@ import 'package:intl/intl.dart' show DateFormat;
 
 import '../../../../core/data/hive_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/pin_helper.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/settings/app_settings_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_controller.dart';
+import '../../../../core/utils/app_validators.dart';
 import '../../../../core/utils/backup_helper.dart';
+import '../../../../core/utils/daily_goal.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/printer_helper.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
@@ -38,7 +41,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const _appVersion = '3.0.0';
+  static const _appVersion = '3.1.0';
 
   final TextEditingController _currencyController = TextEditingController();
   bool _backingUp = false;
@@ -529,6 +532,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               const SizedBox(height: 20),
+              _header(l10n.t('selling_rules')),
+              _buildSelling(),
+              const SizedBox(height: 20),
               _header(l10n.t('security')),
               _buildSecurity(settings),
               const SizedBox(height: 20),
@@ -617,6 +623,141 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         );
       },
+    );
+  }
+
+  /// Sales-side knobs: the daily target shown on the dashboard and the
+  /// discount ceiling above which a cashier needs the manager's PIN.
+  Widget _buildSelling() {
+    final l10n = context.l10n;
+    final box = HiveDatabase.settingsBox;
+    final goal = (box.get('daily_goal') as num?)?.toDouble() ?? 0;
+    final discountLimit = ManagerApproval.discountLimitPercent;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.flag_outlined),
+            title: Text(l10n.t('daily_goal'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(
+                goal > 0
+                    ? Money.format(goal)
+                    : l10n.t('daily_goal_off'),
+                style: const TextStyle(fontSize: 12)),
+            trailing: Icon(Icons.adaptive.arrow_forward, size: 18),
+            onTap: () async {
+              final controller = TextEditingController(
+                  text: goal > 0 ? Money.plain(goal) : '');
+              final value = await showDialog<double>(
+                context: context,
+                builder: (dialog) => AlertDialog(
+                  title: Text(l10n.t('daily_goal')),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l10n.t('daily_goal_hint'),
+                          style:
+                              Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: InputDecoration(
+                          hintText: '0',
+                          prefixText: '${Money.symbol} ',
+                          border: const OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => Navigator.pop(
+                            dialog, parseAmount(controller.text)),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialog),
+                        child: Text(l10n.cancel)),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(dialog, parseAmount(controller.text)),
+                      child: Text(l10n.save),
+                    ),
+                  ],
+                ),
+              );
+              if (value == null) return;
+              await DailyGoal.set(value);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 20),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.admin_panel_settings_outlined),
+            title: Text(l10n.t('discount_limit'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(
+                l10n.t('discount_limit_hint',
+                    {'percent': discountLimit.toStringAsFixed(0)}),
+                style: const TextStyle(fontSize: 12)),
+            trailing: Icon(Icons.adaptive.arrow_forward, size: 18),
+            onTap: () async {
+              final controller = TextEditingController(
+                  text: discountLimit.toStringAsFixed(0));
+              final value = await showDialog<double>(
+                context: context,
+                builder: (dialog) => AlertDialog(
+                  title: Text(l10n.t('discount_limit')),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l10n.t('discount_limit_body'),
+                          style:
+                              Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          hintText: '10',
+                          suffixText: '%',
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => Navigator.pop(
+                            dialog, parseAmount(controller.text)),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialog),
+                        child: Text(l10n.cancel)),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(dialog, parseAmount(controller.text)),
+                      child: Text(l10n.save),
+                    ),
+                  ],
+                ),
+              );
+              if (value == null) return;
+              await ManagerApproval.setDiscountLimitPercent(
+                  value.clamp(0, 100));
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
     );
   }
 

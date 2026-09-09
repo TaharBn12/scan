@@ -24,6 +24,8 @@ class Shift {
   /// Snapshot of the computed figures at closing.
   final double cashSales;
   final double creditCollected;
+  /// Cash handed back to customers for returns processed in this shift.
+  final double returnsPaidOut;
   final double paidOut;
   final int invoiceCount;
   final String note;
@@ -38,6 +40,7 @@ class Shift {
     this.countedCash,
     this.cashSales = 0,
     this.creditCollected = 0,
+    this.returnsPaidOut = 0,
     this.paidOut = 0,
     this.invoiceCount = 0,
     this.note = '',
@@ -47,7 +50,7 @@ class Shift {
 
   /// What the drawer should hold: float + cash in − cash out.
   double get expectedCash =>
-      openingFloat + cashSales + creditCollected - paidOut;
+      openingFloat + cashSales + creditCollected - returnsPaidOut - paidOut;
 
   /// Positive = surplus (فائض), negative = shortage (عجز).
   double get difference => (countedCash ?? expectedCash) - expectedCash;
@@ -60,6 +63,7 @@ class Shift {
     double? countedCash,
     double? cashSales,
     double? creditCollected,
+    double? returnsPaidOut,
     double? paidOut,
     int? invoiceCount,
     String? note,
@@ -74,6 +78,7 @@ class Shift {
         countedCash: countedCash ?? this.countedCash,
         cashSales: cashSales ?? this.cashSales,
         creditCollected: creditCollected ?? this.creditCollected,
+        returnsPaidOut: returnsPaidOut ?? this.returnsPaidOut,
         paidOut: paidOut ?? this.paidOut,
         invoiceCount: invoiceCount ?? this.invoiceCount,
         note: note ?? this.note,
@@ -89,6 +94,7 @@ class Shift {
         'countedCash': countedCash,
         'cashSales': cashSales,
         'creditCollected': creditCollected,
+        'returnsPaidOut': returnsPaidOut,
         'paidOut': paidOut,
         'invoiceCount': invoiceCount,
         'note': note,
@@ -105,6 +111,7 @@ class Shift {
         countedCash: (map['countedCash'] as num?)?.toDouble(),
         cashSales: (map['cashSales'] as num?)?.toDouble() ?? 0,
         creditCollected: (map['creditCollected'] as num?)?.toDouble() ?? 0,
+        returnsPaidOut: (map['returnsPaidOut'] as num?)?.toDouble() ?? 0,
         paidOut: (map['paidOut'] as num?)?.toDouble() ?? 0,
         invoiceCount: (map['invoiceCount'] as num?)?.toInt() ?? 0,
         note: map['note'] as String? ?? '',
@@ -154,6 +161,7 @@ class ShiftStore {
     required double countedCash,
     required double cashSales,
     required double creditCollected,
+    double returnsPaidOut = 0,
     required double paidOut,
     required int invoiceCount,
     String? closedBy,
@@ -167,6 +175,7 @@ class ShiftStore {
       countedCash: countedCash,
       cashSales: cashSales,
       creditCollected: creditCollected,
+      returnsPaidOut: returnsPaidOut,
       paidOut: paidOut,
       invoiceCount: invoiceCount,
       note: note,

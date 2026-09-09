@@ -2,12 +2,14 @@ import 'package:bloc/bloc.dart';
 import 'package:equatable/equatable.dart';
 import '../../domain/entities/cart_item.dart';
 import '../../domain/entities/payment_method.dart';
+import '../../domain/promo_engine.dart';
 import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'package:billing_app/features/product/domain/usecases/product_usecases.dart';
 import 'package:billing_app/features/customers/domain/entities/customer.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../core/utils/printer_helper.dart';
 import '../../data/held_cart_store.dart';
+import '../../data/promotion_repository.dart';
 import '../../../../core/data/hive_database.dart';
 
 part 'billing_event.dart';
@@ -15,6 +17,7 @@ part 'billing_state.dart';
 
 class BillingBloc extends Bloc<BillingEvent, BillingState> {
   final GetProductByBarcodeUseCase getProductByBarcodeUseCase;
+  final PromotionRepository _promotions = PromotionRepository();
 
   BillingBloc({required this.getProductByBarcodeUseCase})
       : super(const BillingState()) {
@@ -61,6 +64,26 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     );
   }
 
+  // ------------------------------------------------------------- pricing
+
+  /// After any cart mutation: re-run the offers so the total the customer
+  /// pays always matches what the screen shows.
+  BillingState _priced(BillingState base, List<CartItem> items) {
+    final result = PromoEngine.compute(
+      items,
+      _promotions.activeOn(DateTime.now()),
+    );
+    return base.copyWith(cartItems: items, appliedPromos: result.lines);
+  }
+
+  /// [old] followed the automatic price → keep following it at the new
+  /// quantity (the wholesale tier switches prices by itself). A hand-typed
+  /// price is never touched.
+  double _priceAtNewQty(CartItem old, double newQty) {
+    final wasAuto = old.unitPrice == old.autoPrice;
+    return wasAuto ? old.product.priceFor(newQty) : old.unitPrice;
+  }
+
   void _onAddProductToCart(
       AddProductToCartEvent event, Emitter<BillingState> emit) {
     // Clear error when adding
@@ -71,17 +94,20 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
         .indexWhere((item) => item.product.id == event.product.id);
     if (existingIndex >= 0) {
       final existingItem = cleanState.cartItems[existingIndex];
+      final mergedQty = existingItem.quantity + qty;
       final items = List<CartItem>.from(cleanState.cartItems);
-      items[existingIndex] =
-          existingItem.copyWith(quantity: existingItem.quantity + qty);
-      emit(cleanState.copyWith(cartItems: items));
+      items[existingIndex] = existingItem.copyWith(
+        quantity: mergedQty,
+        unitPrice: _priceAtNewQty(existingItem, mergedQty),
+      );
+      emit(_priced(cleanState, items));
     } else {
       final newItem = CartItem(
         product: event.product,
         quantity: qty,
         unitPrice: event.unitPrice,
       );
-      emit(cleanState.copyWith(cartItems: [...cleanState.cartItems, newItem]));
+      emit(_priced(cleanState, [...cleanState.cartItems, newItem]));
     }
   }
 
@@ -90,7 +116,7 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     final updatedList = state.cartItems
         .where((item) => item.product.id != event.productId)
         .toList();
-    emit(state.copyWith(cartItems: updatedList));
+    emit(_priced(state, updatedList));
   }
 
   void _onUpdateQuantity(
@@ -103,9 +129,13 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     final index = state.cartItems
         .indexWhere((item) => item.product.id == event.productId);
     if (index >= 0) {
+      final old = state.cartItems[index];
       final items = List<CartItem>.from(state.cartItems);
-      items[index] = items[index].copyWith(quantity: event.quantity);
-      emit(state.copyWith(cartItems: items));
+      items[index] = old.copyWith(
+        quantity: event.quantity,
+        unitPrice: _priceAtNewQty(old, event.quantity),
+      );
+      emit(_priced(state, items));
     }
   }
 
@@ -116,7 +146,7 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     if (index >= 0 && event.unitPrice >= 0) {
       final items = List<CartItem>.from(state.cartItems);
       items[index] = items[index].copyWith(unitPrice: event.unitPrice);
-      emit(state.copyWith(cartItems: items));
+      emit(_priced(state, items));
     }
   }
 
@@ -164,12 +194,13 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
       ));
     }
     await heldCarts.remove(event.cart.id);
-    emit(BillingState(
-      cartItems: items,
-      customerId: event.cart.customerId,
-      customerName: event.cart.customerName,
-      note: event.cart.note,
-    ));
+    emit(_priced(
+        BillingState(
+          customerId: event.cart.customerId,
+          customerName: event.cart.customerName,
+          note: event.cart.note,
+        ),
+        items));
   }
 
   Future<void> _onPrintReceipt(

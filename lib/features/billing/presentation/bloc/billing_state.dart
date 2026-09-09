@@ -16,6 +16,9 @@ class BillingState extends Equatable {
   final String? customerPhone;
   final double initialPayment;
   final String note;
+  /// Offers applied automatically (see PromoEngine). Recomputed by the bloc
+  /// on every cart change — never edited by hand.
+  final List<AppliedPromo> appliedPromos;
 
   const BillingState({
     this.cartItems = const [],
@@ -31,6 +34,7 @@ class BillingState extends Equatable {
     this.customerPhone,
     this.initialPayment = 0,
     this.note = '',
+    this.appliedPromos = const [],
   });
 
   double get subtotal => cartItems.fold(0, (sum, item) => sum + item.total);
@@ -45,7 +49,14 @@ class BillingState extends Equatable {
     return raw.clamp(0, subtotal);
   }
 
-  double get totalAmount => subtotal - discountAmount;
+  /// What the offers knocked off the bill.
+  double get promoDiscount =>
+      appliedPromos.fold(0.0, (sum, p) => sum + p.amount);
+
+  double get totalAmount {
+    final total = subtotal - discountAmount - promoDiscount;
+    return total < 0 ? 0 : total;
+  }
 
   BillingState copyWith({
     List<CartItem>? cartItems,
@@ -64,6 +75,7 @@ class BillingState extends Equatable {
     bool clearCustomer = false,
     double? initialPayment,
     String? note,
+    List<AppliedPromo>? appliedPromos,
   }) {
     return BillingState(
       cartItems: cartItems ?? this.cartItems,
@@ -83,6 +95,7 @@ class BillingState extends Equatable {
           clearCustomer ? null : (customerPhone ?? this.customerPhone),
       initialPayment: initialPayment ?? this.initialPayment,
       note: note ?? this.note,
+      appliedPromos: appliedPromos ?? this.appliedPromos,
     );
   }
 
@@ -101,5 +114,6 @@ class BillingState extends Equatable {
         customerPhone,
         initialPayment,
         note,
+        appliedPromos,
       ];
 }

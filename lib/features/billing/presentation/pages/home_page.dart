@@ -7,6 +7,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../billing/presentation/bloc/billing_bloc.dart';
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
@@ -14,6 +15,9 @@ import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
+import '../../../sales/domain/entities/sale.dart';
+import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../sales/presentation/pages/invoice_page.dart';
 import '../../data/held_cart_store.dart';
 import '../../domain/entities/cart_item.dart';
 
@@ -76,6 +80,13 @@ class _HomePageState extends State<HomePage>
 
   /// Weighed products (kg, L…) ask for the quantity instead of adding 1.
   Future<void> _handleBarcode(String barcode) async {
+    // An invoice QR (printed or shared) pulls that exact sale up — for a
+    // reprint, a debt collection, or a goods return.
+    final saleId = Sale.saleIdFromScan(barcode);
+    if (saleId != null) {
+      await _openScannedInvoice(saleId);
+      return;
+    }
     final products = context.read<ProductBloc>().state;
     final product = products.byBarcode(barcode);
     if (product != null && product.unit.allowsDecimals) {
@@ -90,6 +101,30 @@ class _HomePageState extends State<HomePage>
       return;
     }
     context.read<BillingBloc>().add(ScanBarcodeEvent(barcode));
+  }
+
+  /// Finds the sale behind a scanned invoice QR and opens it.
+  Future<void> _openScannedInvoice(String saleId) async {
+    final l10n = context.l10n;
+    Sale? sale;
+    for (final s in context.read<SaleBloc>().state.sales) {
+      if (s.id == saleId) {
+        sale = s;
+        break;
+      }
+    }
+    if (sale == null) {
+      showAppSnack(context, l10n.t('invoice_not_found'),
+          icon: Icons.search_off_rounded);
+      return;
+    }
+    _scannerController.stop();
+    await context.push('/invoice',
+        extra: InvoiceRouteArgs(sale: sale, isDraft: false));
+    if (!mounted) return;
+    if (_isCameraOn) _scannerController.start();
+    // The invoice may have gained a return while it was open: refresh.
+    context.read<SaleBloc>().add(LoadSales());
   }
 
   Future<void> _typeBarcode() async {
@@ -158,6 +193,12 @@ class _HomePageState extends State<HomePage>
 
   Future<void> _confirmClear() async {
     final l10n = context.l10n;
+    // Wiping a whole cart is a sensitive move when a cashier is logged in.
+    if (!await ManagerApproval.request(context,
+        reasonKey: 'approval_reason_clear_cart')) {
+      return;
+    }
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -664,6 +705,27 @@ class _HomePageState extends State<HomePage>
                                 .bodySmall
                                 ?.copyWith(color: context.mutedColor),
                           ),
+                          if (state.promoDiscount > 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 3),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.local_offer_rounded,
+                                      size: 12, color: AppTheme.success),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    l10n.t('you_saved', {
+                                      'amount': Money.format(
+                                          state.promoDiscount),
+                                    }),
+                                    style: const TextStyle(
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.success),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -756,6 +818,10 @@ class _HomePageState extends State<HomePage>
         ),
         child: const Icon(Icons.delete_outline, color: Colors.white),
       ),
+      // Removing a line from a customer's bill needs the manager's nod when
+      // the person at the till isn't one (this is where "ghost sales" hide).
+      confirmDismiss: (_) => ManagerApproval.request(context,
+          reasonKey: 'approval_reason_remove_line'),
       onDismissed: (_) => context
           .read<BillingBloc>()
           .add(RemoveProductFromCartEvent(item.product.id)),
@@ -771,7 +837,11 @@ class _HomePageState extends State<HomePage>
           if (result == null || !context.mounted) return;
           final bloc = context.read<BillingBloc>();
           bloc.add(UpdateQuantityEvent(item.product.id, result.quantity));
-          bloc.add(UpdateLinePriceEvent(item.product.id, result.unitPrice));
+          // Only an actually-edited price overrides — otherwise the
+          // automatic (retail/wholesale) price keeps following the qty.
+          if (result.unitPrice != item.unitPrice) {
+            bloc.add(UpdateLinePriceEvent(item.product.id, result.unitPrice));
+          }
         },
         child: Row(
           children: [
@@ -808,6 +878,14 @@ class _HomePageState extends State<HomePage>
                       ),
                     ],
                   ),
+                  if (item.isWholesalePriced) ...[
+                    const SizedBox(height: 6),
+                    AppBadge(
+                      text: l10n.t('wholesale_badge'),
+                      color: context.scheme.primary,
+                      icon: Icons.sell_outlined,
+                    ),
+                  ],
                   if (stockWarning) ...[
                     const SizedBox(height: 6),
                     AppBadge(
@@ -835,13 +913,17 @@ class _HomePageState extends State<HomePage>
                 children: [
                   _StepButton(
                     icon: Icons.remove_rounded,
-                    onPressed: () {
+                    onPressed: () async {
                       final step = decimals ? 0.5 : 1.0;
                       final next = item.quantity - step;
                       final bloc = context.read<BillingBloc>();
                       if (next > 0) {
                         bloc.add(UpdateQuantityEvent(item.product.id, next));
-                      } else {
+                        return;
+                      }
+                      final ok = await ManagerApproval.request(context,
+                          reasonKey: 'approval_reason_remove_line');
+                      if (ok && context.mounted) {
                         bloc.add(
                             RemoveProductFromCartEvent(item.product.id));
                       }

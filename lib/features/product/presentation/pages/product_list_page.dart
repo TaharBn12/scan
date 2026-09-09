@@ -475,6 +475,23 @@ class _ProductTile extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: Theme.of(context).colorScheme.onSurface),
                       ),
+                      if (product.hasWholesale)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color:
+                                AppTheme.primaryColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${l10n.t('wholesale_badge')} ${Money.format(product.wholesalePrice)} +${formatQty(product.wholesaleMinQty)}',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.primaryColor),
+                          ),
+                        ),
                       if (product.trackStock)
                         _StockBadge(product: product, unitShort: unitShort),
                     ],
