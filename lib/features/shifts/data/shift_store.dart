@@ -132,7 +132,7 @@ class ShiftStore {
 
   void load() {
     final all = CloudDatabase.shiftsBox.values
-        .map((raw) => Shift.fromMap(raw))
+        .map((raw) => Shift.fromMap(Map<String, dynamic>.from(raw)))
         .where((s) => s.id.isNotEmpty)
         .toList()
       ..sort((a, b) => b.openedAt.compareTo(a.openedAt));
@@ -190,7 +190,7 @@ class ShiftStore {
     final box = CloudDatabase.shiftsBox;
     if (box.length <= keep) return;
     final all = box.values
-        .map((raw) => Shift.fromMap(raw))
+        .map((raw) => Shift.fromMap(Map<String, dynamic>.from(raw)))
         .toList()
       ..sort((a, b) => b.openedAt.compareTo(a.openedAt));
     for (final old in all.skip(keep)) {
