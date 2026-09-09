@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/error/failure.dart';
 import '../../domain/entities/shop.dart';
 import '../../domain/repositories/shop_repository.dart';
@@ -15,7 +15,7 @@ class ShopRepositoryImpl implements ShopRepository {
   @override
   Future<Either<Failure, Shop>> getShop() async {
     try {
-      final shop = HiveDatabase.shopBox.get(shopKey);
+      final shop = CloudDatabase.shopBox.get(shopKey);
       return Right(shop ?? defaultShop);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -25,7 +25,7 @@ class ShopRepositoryImpl implements ShopRepository {
   @override
   Future<Either<Failure, void>> updateShop(Shop shop) async {
     try {
-      await HiveDatabase.shopBox.put(shopKey, shop);
+      await CloudDatabase.shopBox.put(shopKey, shop);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -33,5 +33,5 @@ class ShopRepositoryImpl implements ShopRepository {
   }
 
   /// Synchronous accessor for places that can't await (PDF/receipt builders).
-  static Shop current() => HiveDatabase.shopBox.get(shopKey) ?? defaultShop;
+  static Shop current() => CloudDatabase.shopBox.get(shopKey) ?? defaultShop;
 }

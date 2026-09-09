@@ -6,7 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/csv/csv_helper.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -213,7 +213,7 @@ class _ReportsPageState extends State<ReportsPage>
     final l10n = context.l10n;
     final printer = PrinterHelper();
     if (!printer.isConnected) {
-      final mac = HiveDatabase.settingsBox.get('printer_mac') as String?;
+      final mac = CloudDatabase.settingsBox.get('printer_mac') as String?;
       if (mac == null || mac.isEmpty) {
         _snack(l10n.t('no_printer'), color: AppTheme.danger);
         return;

@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/cloud/cloud_auth_controller.dart';
 import '../../core/security/session_controller.dart';
+import '../../features/auth/presentation/pages/auth_gate_page.dart';
 import '../../features/billing/presentation/pages/home_page.dart';
 import '../../features/product/presentation/pages/product_list_page.dart';
 import '../../features/product/presentation/pages/add_product_page.dart';
@@ -21,9 +24,7 @@ import '../../features/customers/presentation/pages/debts_page.dart';
 import '../../features/inventory/presentation/pages/stock_take_page.dart';
 import '../../features/search/presentation/pages/search_page.dart';
 import '../../features/shifts/presentation/pages/shift_page.dart';
-import '../../features/users/domain/entities/app_user.dart';
 import '../../features/users/presentation/pages/login_page.dart';
-import '../../features/users/presentation/pages/user_form_page.dart';
 import '../../features/sales/presentation/pages/invoice_page.dart';
 import '../../features/expenses/presentation/pages/expenses_page.dart';
 import '../../features/inventory/presentation/pages/purchases_page.dart';
@@ -43,15 +44,32 @@ import '../../features/users/presentation/pages/lock_page.dart';
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
 
+// The global `cloudAuth` session lives in cloud_auth_controller.dart and is
+// assigned once in main().
+
 final router = GoRouter(
-  initialLocation: '/menu',
-  refreshListenable: sessionController,
+  initialLocation: '/splash',
+  refreshListenable: Listenable.merge([cloudAuth, sessionController]),
   redirect: (context, state) {
     final location = state.uri.path;
     const authRoutes = ['/login', '/lock'];
+    const cloudRoutes = ['/splash', '/cloud-login', '/pending'];
 
-    // Signed out: accounts go to the login screen, a plain app PIN to the
-    // pad. Both may hop between each other (PIN tab / password tab).
+    // ---- Cloud auth gate (runs first, login is mandatory) ----
+    switch (cloudAuth.state) {
+      case CloudAuthState.unknown:
+      case CloudAuthState.configMissing:
+        return location == '/splash' ? null : '/splash';
+      case CloudAuthState.signedOut:
+        return location == '/cloud-login' ? null : '/cloud-login';
+      case CloudAuthState.pendingApproval:
+        return location == '/pending' ? null : '/pending';
+      case CloudAuthState.ready:
+        break;
+    }
+    if (cloudRoutes.contains(location)) return '/menu';
+
+    // ---- Legacy in-app locks (PIN / quick account switch) ----
     if (sessionController.needsUnlock) {
       if (authRoutes.contains(location)) return null;
       return sessionController.isMultiUser ? '/login' : '/lock';
@@ -63,6 +81,18 @@ final router = GoRouter(
     return null;
   },
   routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) => SplashPage(controller: cloudAuth),
+    ),
+    GoRoute(
+      path: '/cloud-login',
+      builder: (context, state) => LoginPage(controller: cloudAuth),
+    ),
+    GoRoute(
+      path: '/pending',
+      builder: (context, state) => PendingApprovalPage(controller: cloudAuth),
+    ),
     GoRoute(
       path: '/lock',
       builder: (context, state) => const LockPage(),
@@ -220,14 +250,7 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/users',
-      builder: (context, state) => const UsersPage(),
-      routes: [
-        GoRoute(
-          path: 'form',
-          builder: (context, state) =>
-              UserFormPage(existing: state.extra as AppUser?),
-        ),
-      ],
+      builder: (context, state) => UsersPage(controller: cloudAuth),
     ),
     GoRoute(
       path: '/customers',

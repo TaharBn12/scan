@@ -9,7 +9,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' show DateFormat;
 
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_auth_controller.dart';
+import '../../../../core/cloud/cloud_database.dart';
+import '../../../../core/cloud/firebase_layer.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/pin_helper.dart';
@@ -41,7 +43,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const _appVersion = '3.1.0';
+  static const _appVersion = '4.0.0';
 
   final TextEditingController _currencyController = TextEditingController();
   bool _backingUp = false;
@@ -431,20 +433,32 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: l10n.t('users_subtitle'),
                   onTap: () => context.push('/users'),
                 ),
-                if (sessionController.isMultiUser)
+                if (cloudAuth.state == CloudAuthState.ready)
                   _tile(
-                    icon: Icons.logout_rounded,
-                    title: l10n.t('sign_out'),
-                    subtitle: sessionController.currentUser == null
-                        ? ''
-                        : '${sessionController.currentUser!.name} · '
-                            '${l10n.t(sessionController.currentUser!.role.labelKey)}',
+                    icon: Icons.cloud_done_outlined,
+                    title: l10n.t('cloud_shop_title'),
+                    subtitle:
+                        '${l10n.t('shop_code_label')}: ${FirebaseLayer.shopCodeOf(cloudAuth.shopId ?? '')} · ${l10n.t('cloud_shop_synced')}',
                     showChevron: false,
-                    onTap: () async {
-                      await sessionController.lock();
-                      if (context.mounted) context.go('/login');
-                    },
+                    onTap: () {},
                   ),
+                _tile(
+                  icon: Icons.logout_rounded,
+                  title: l10n.t('sign_out'),
+                  subtitle: sessionController.currentUser == null
+                      ? ''
+                      : '${sessionController.currentUser!.name} · '
+                          '${l10n.t(sessionController.currentUser!.role.labelKey)}',
+                  showChevron: false,
+                  onTap: () async {
+                    if (cloudAuth.state != CloudAuthState.configMissing) {
+                      await cloudAuth.signOut();
+                      return; // the router takes us to the cloud login page
+                    }
+                    await sessionController.lock();
+                    if (context.mounted) context.go('/login');
+                  },
+                ),
               ]),
               const SizedBox(height: 20),
               _header(l10n.t('appearance')),
@@ -479,6 +493,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             onChanged: (v) {
                               if (v.trim().isNotEmpty) {
                                 appSettings.setCurrency(symbol: v);
+                                patchShopSettings({'currencySymbol': v});
                               }
                             },
                           ),
@@ -502,6 +517,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             onChanged: (v) {
                               if (v != null) {
                                 appSettings.setCurrency(decimals: v);
+                                patchShopSettings({'decimalDigits': v});
                               }
                             },
                           ),
@@ -517,7 +533,10 @@ class _SettingsPageState extends State<SettingsPage> {
                               {'amount': Money.format(1234.5)}),
                           style: const TextStyle(fontSize: 11)),
                       value: settings.currencySymbolBefore,
-                      onChanged: (v) => appSettings.setCurrency(symbolBefore: v),
+                      onChanged: (v) {
+                        appSettings.setCurrency(symbolBefore: v);
+                        patchShopSettings({'currencySymbolBefore': v});
+                      },
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -630,7 +649,7 @@ class _SettingsPageState extends State<SettingsPage> {
   /// discount ceiling above which a cashier needs the manager's PIN.
   Widget _buildSelling() {
     final l10n = context.l10n;
-    final box = HiveDatabase.settingsBox;
+    final box = CloudDatabase.settingsBox;
     final goal = (box.get('daily_goal') as num?)?.toDouble() ?? 0;
     final discountLimit = ManagerApproval.discountLimitPercent;
     return _card(
@@ -849,7 +868,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildPrinter() {
     final l10n = context.l10n;
-    final box = HiveDatabase.settingsBox;
+    final box = CloudDatabase.settingsBox;
     return BlocConsumer<PrinterBloc, PrinterState>(
       listener: (context, state) {
         if (state.errorMessage != null &&
@@ -1120,8 +1139,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           size: 18)),
                 ],
                 selected: {theme.mode},
-                onSelectionChanged: (s) =>
-                    themeController.setThemeMode(s.first),
+                onSelectionChanged: (s) {
+                  themeController.setThemeMode(s.first);
+                  patchShopSettings({'themeMode': s.first.name});
+                },
               ),
             ),
             const SizedBox(height: 20),
@@ -1136,7 +1157,10 @@ class _SettingsPageState extends State<SettingsPage> {
                     accent: accent,
                     selected: accent.id == theme.accentId,
                     label: l10n.t(accent.labelKey),
-                    onTap: () => themeController.setAccent(accent.id),
+                    onTap: () {
+                      themeController.setAccent(accent.id);
+                      patchShopSettings({'accentColor': accent.id});
+                    },
                   ),
               ],
             ),
@@ -1148,7 +1172,10 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: Text(l10n.t('compact_mode_hint'),
                   style: const TextStyle(fontSize: 11)),
               value: theme.compact,
-              onChanged: themeController.setCompact,
+              onChanged: (v) {
+                themeController.setCompact(v);
+                patchShopSettings({'compactMode': v});
+              },
             ),
           ],
         ),
@@ -1247,7 +1274,10 @@ class _LanguagePicker extends StatelessWidget {
             label: Text(o.value),
             selected: current?.languageCode == o.key,
             onSelected: (_) =>
-                appSettings.setLocale(o.key == null ? null : Locale(o.key!)),
+                (loc) {
+                  appSettings.setLocale(loc);
+                  patchShopSettings({'locale': loc?.languageCode ?? ''});
+                }(o.key == null ? null : Locale(o.key!)),
           ),
       ],
     );

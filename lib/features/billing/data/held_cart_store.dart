@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../core/data/hive_database.dart';
+import '../../../core/cloud/cloud_database.dart';
 
 /// One line of a parked (held) invoice. Only the ids and the negotiated
 /// price are stored, so resuming always uses the freshest product data.
@@ -96,7 +96,7 @@ class HeldCartsStore {
 
   /// Reads the box into memory. Called once at startup.
   void load() {
-    final items = HiveDatabase.heldCartsBox.values
+    final items = CloudDatabase.heldCartsBox.values
         .map((raw) => HeldCart.fromMap(Map<String, dynamic>.from(raw as Map)))
         .where((c) => c.id.isNotEmpty && c.lines.isNotEmpty)
         .toList()
@@ -107,17 +107,17 @@ class HeldCartsStore {
   int get count => carts.value.length;
 
   Future<void> save(HeldCart cart) async {
-    await HiveDatabase.heldCartsBox.put(cart.id, cart.toMap());
+    await CloudDatabase.heldCartsBox.put(cart.id, cart.toMap());
     load();
   }
 
   Future<void> remove(String id) async {
-    await HiveDatabase.heldCartsBox.delete(id);
+    await CloudDatabase.heldCartsBox.delete(id);
     load();
   }
 
   Future<void> clear() async {
-    await HiveDatabase.heldCartsBox.clear();
+    await CloudDatabase.heldCartsBox.clear();
     load();
   }
 }

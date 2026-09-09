@@ -1,6 +1,9 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'config/routes/app_routes.dart';
+import 'core/cloud/cloud_auth_controller.dart';
+import 'core/cloud/cloud_database.dart';
 import 'core/data/hive_database.dart';
 import 'core/l10n/app_localizations.dart';
 import 'core/security/session_controller.dart';
@@ -23,8 +26,21 @@ import 'features/customers/presentation/bloc/customer_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Firebase first: everything the app does lives in Realtime Database.
+  // google-services.json missing → the splash screen explains it and the
+  // build still works for local development.
+  var firebaseAvailable = false;
+  try {
+    await Firebase.initializeApp();
+    await CloudDatabase.enableOfflinePersistence();
+    firebaseAvailable = true;
+  } catch (_) {
+    firebaseAvailable = false;
+  }
+  // Legacy local boxes stay as the migration source + pre-login fallbacks.
   await HiveDatabase.init();
   await di.init();
+  cloudAuth = CloudAuthController(firebaseAvailable: firebaseAvailable);
   // Parked invoices are restored so a restart never loses a counter queue.
   heldCarts.load();
   // Restore the open cash-drawer session, if the till was left open.
@@ -44,16 +60,55 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   DateTime? _pausedAt;
 
+  // Captured so the cloud session can (re)load everything after sign-in.
+  late final ProductBloc _productBloc = di.sl<ProductBloc>();
+  late final ShopBloc _shopBloc = di.sl<ShopBloc>();
+  late final BillingBloc _billingBloc =
+      BillingBloc(getProductByBarcodeUseCase: di.sl());
+  late final PrinterBloc _printerBloc = di.sl<PrinterBloc>();
+  late final SaleBloc _saleBloc = di.sl<SaleBloc>();
+  late final CustomerBloc _customerBloc = di.sl<CustomerBloc>();
+  late final ExpenseBloc _expenseBloc = di.sl<ExpenseBloc>();
+  late final InventoryBloc _inventoryBloc = di.sl<InventoryBloc>();
+
+  CloudAuthState _lastAuthState = CloudAuthState.unknown;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    cloudAuth.addListener(_onAuthChanged);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    cloudAuth.removeListener(_onAuthChanged);
     super.dispose();
+  }
+
+  /// Every time the cloud session becomes ready (first sign-in, hot
+  /// restart with a remembered session, switching to another shop), push a
+  /// fresh load through all blocs so screens show the shop's live data.
+  void _onAuthChanged() {
+    if (cloudAuth.state == CloudAuthState.ready &&
+        _lastAuthState != CloudAuthState.ready) {
+      _reloadAll();
+    }
+    _lastAuthState = cloudAuth.state;
+  }
+
+  void _reloadAll() {
+    if (!mounted) return;
+    _productBloc.add(LoadProducts());
+    _shopBloc.add(LoadShopEvent());
+    _saleBloc.add(LoadSales());
+    _customerBloc.add(LoadCustomers());
+    _expenseBloc.add(LoadExpenses());
+    _inventoryBloc.add(LoadInventory());
+    _printerBloc.add(InitPrinterEvent());
+    heldCarts.load();
+    shiftStore.load();
   }
 
   @override
@@ -76,24 +131,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-        BlocProvider<ProductBloc>(
-            create: (context) => di.sl<ProductBloc>()..add(LoadProducts())),
-        BlocProvider<ShopBloc>(
-            create: (context) => di.sl<ShopBloc>()..add(LoadShopEvent())),
-        BlocProvider<BillingBloc>(
-            create: (context) =>
-                BillingBloc(getProductByBarcodeUseCase: di.sl())),
-        BlocProvider<PrinterBloc>(
-            create: (context) => di.sl<PrinterBloc>()..add(InitPrinterEvent())),
-        BlocProvider<SaleBloc>(
-            create: (context) => di.sl<SaleBloc>()..add(LoadSales())),
-        BlocProvider<CustomerBloc>(
-            create: (context) => di.sl<CustomerBloc>()..add(LoadCustomers())),
-        BlocProvider<ExpenseBloc>(
-            create: (context) => di.sl<ExpenseBloc>()..add(LoadExpenses())),
-        BlocProvider<InventoryBloc>(
-            create: (context) =>
-                di.sl<InventoryBloc>()..add(LoadInventory())),
+        BlocProvider<ProductBloc>.value(
+            value: _productBloc..add(LoadProducts())),
+        BlocProvider<ShopBloc>.value(value: _shopBloc..add(LoadShopEvent())),
+        BlocProvider<BillingBloc>.value(value: _billingBloc),
+        BlocProvider<PrinterBloc>.value(
+            value: _printerBloc..add(InitPrinterEvent())),
+        BlocProvider<SaleBloc>.value(value: _saleBloc..add(LoadSales())),
+        BlocProvider<CustomerBloc>.value(
+            value: _customerBloc..add(LoadCustomers())),
+        BlocProvider<ExpenseBloc>.value(
+            value: _expenseBloc..add(LoadExpenses())),
+        BlocProvider<InventoryBloc>.value(
+            value: _inventoryBloc..add(LoadInventory())),
       ],
       child: ValueListenableBuilder<ThemeSettings>(
         valueListenable: themeController,

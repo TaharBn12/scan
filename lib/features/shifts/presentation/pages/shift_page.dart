@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' show DateFormat;
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -280,7 +280,7 @@ class ShiftPage extends StatelessWidget {
     final l10n = context.l10n;
     final printer = PrinterHelper();
     if (!printer.isConnected) {
-      final mac = HiveDatabase.settingsBox.get('printer_mac') as String?;
+      final mac = CloudDatabase.settingsBox.get('printer_mac') as String?;
       if (mac == null || mac.isEmpty || !await printer.connect(mac)) {
         if (context.mounted) {
           showAppSnack(context, l10n.t('no_printer'),

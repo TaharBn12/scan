@@ -1,23 +1,29 @@
 import 'package:fpdart/fpdart.dart';
-import 'package:uuid/uuid.dart';
 
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/security/auth_helper.dart';
-import '../../../../core/security/pin_helper.dart';
 import '../../domain/entities/app_user.dart';
 
-/// Users live in a plain Hive box. Small feature, so repository interface and
-/// implementation share one file.
+/// Shop members live in the cloud at /shops/{shopId}/members/{uid}.
+/// Passwords never touch the database — they're Firebase Auth's business;
+/// here we only keep who the person is and what they may do.
 class UserRepository {
   static const _currentUserKey = 'current_user_id';
 
+  /// Member maps from RTDB lack the legacy auth fields — enrich with the
+  /// member id (the map key) so the entity loads safely.
+  AppUser _toUser(String uid, Map raw) {
+    final map = Map<String, dynamic>.from(raw);
+    map['id'] = uid;
+    return AppUser.fromMap(map);
+  }
+
   Future<Either<Failure, List<AppUser>>> getUsers() async {
     try {
-      final users = HiveDatabase.usersBox.values
-          .map((raw) => AppUser.fromMap(Map<String, dynamic>.from(raw as Map)))
-          .toList()
-        ..sort((a, b) {
+      final box = CloudDatabase.usersBox;
+      final users = <AppUser>[
+        for (final uid in box.keys) _toUser(uid, box.get(uid) ?? const {}),
+      ]..sort((a, b) {
           if (a.role != b.role) return a.isAdmin ? -1 : 1;
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
@@ -27,108 +33,34 @@ class UserRepository {
     }
   }
 
-  /// Creates or updates an account.
-  ///
-  /// [password] and [pin] are optional on update (empty keeps the current
-  /// one). The login identifier must be unique, and so must the PIN — it is
-  /// what identifies a cashier at the quick-switch screen.
+  /// Creates or updates a member. Only name/role/active are editable here —
+  /// a person's credentials belong to Firebase Auth (they sign up on the
+  /// login page with the shop code, the admin then activates them here).
   Future<Either<Failure, AppUser>> saveUser({
     String? id,
     required String name,
     required UserRole role,
     String? email,
-    String? password,
-    String? pin,
+    String? password, // legacy signature, ignored in cloud mode
+    String? pin, // legacy signature, ignored in cloud mode
     bool? active,
   }) async {
     try {
-      final box = HiveDatabase.usersBox;
-      final existing = id == null ? null : box.get(id);
-      final normalizedEmail =
-          email == null ? null : AuthHelper.normalizeEmail(email);
-
-      if (normalizedEmail != null && normalizedEmail.isNotEmpty) {
-        if (!AuthHelper.isValidEmail(normalizedEmail)) {
-          return const Left(CacheFailure('invalid_email'));
-        }
-        for (final raw in box.values) {
-          final other = AppUser.fromMap(Map<String, dynamic>.from(raw as Map));
-          if (other.id != id && other.email == normalizedEmail) {
-            return const Left(CacheFailure('email_in_use'));
-          }
-        }
+      if (id == null || id.isEmpty) {
+        return const Left(CacheFailure('cloud_member_id_required'));
       }
-
-      AppUser user;
-      if (existing != null) {
-        user = AppUser.fromMap(Map<String, dynamic>.from(existing as Map))
-            .copyWith(
-          name: name.trim(),
-          role: role,
-          email: normalizedEmail,
-          active: active,
-        );
-      } else {
-        final hasPassword =
-            password != null && AuthHelper.isValidPassword(password);
-        final hasPin = pin != null && PinHelper.isValidPin(pin);
-        // A brand new account needs at least one way to sign in.
-        if (!hasPassword && !hasPin) {
-          return const Left(CacheFailure('password_or_pin_required'));
-        }
-        if (password != null &&
-            password.isNotEmpty &&
-            !AuthHelper.isValidPassword(password)) {
-          return const Left(CacheFailure('password_too_short'));
-        }
-        if (hasPassword && (normalizedEmail == null || normalizedEmail.isEmpty)) {
-          return const Left(CacheFailure('email_required'));
-        }
-        user = AppUser(
-          id: const Uuid().v4(),
-          name: name.trim(),
-          email: normalizedEmail ?? '',
-          role: role,
-          pinHash: '',
-          salt: '',
-          createdAt: DateTime.now(),
-          active: active ?? true,
-        );
-      }
-
-      if (password != null && password.isNotEmpty) {
-        if (!AuthHelper.isValidPassword(password)) {
-          return const Left(CacheFailure('password_too_short'));
-        }
-        if (user.email.isEmpty) {
-          return const Left(CacheFailure('email_required'));
-        }
-        final passwordSalt = AuthHelper.newSalt();
-        user = user.copyWith(
-          passwordSalt: passwordSalt,
-          passwordHash: AuthHelper.hashPassword(password, passwordSalt),
-        );
-      }
-
-      if (pin != null && pin.isNotEmpty) {
-        if (!PinHelper.isValidPin(pin)) {
-          return const Left(CacheFailure('pin_too_short'));
-        }
-        // A PIN must identify a single user at the "who is working" screen.
-        for (final raw in box.values) {
-          final other = AppUser.fromMap(Map<String, dynamic>.from(raw as Map));
-          if (other.id != user.id &&
-              other.pinHash.isNotEmpty &&
-              PinHelper.verify(pin, other.salt, other.pinHash)) {
-            return const Left(CacheFailure('pin_in_use'));
-          }
-        }
-        final salt = PinHelper.newSalt();
-        user = user.copyWith(salt: salt, pinHash: PinHelper.hash(pin, salt));
-      }
-
-      await box.put(user.id, user.toMap());
-      return Right(user);
+      final box = CloudDatabase.usersBox;
+      final current = box.get(id);
+      final merged = <String, dynamic>{
+        if (current != null) ...Map<String, dynamic>.from(current),
+        'name': name.trim(),
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        'role': role.name,
+        if (active != null) 'active': active,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      await box.put(id, merged);
+      return Right(_toUser(id, merged));
     } catch (e) {
       return Left(CacheFailure(e.toString()));
     }
@@ -136,87 +68,51 @@ class UserRepository {
 
   Future<Either<Failure, void>> deleteUser(String id) async {
     try {
-      final box = HiveDatabase.usersBox;
-      final users = box.values
-          .map((raw) => AppUser.fromMap(Map<String, dynamic>.from(raw as Map)))
-          .toList();
-      final target = users.where((u) => u.id == id).firstOrNull;
-      if (target == null) return const Right(null);
-      final adminsLeft = users.where((u) => u.isAdmin && u.id != id).length;
-      if (target.isAdmin && adminsLeft == 0 && users.length > 1) {
-        return const Left(CacheFailure('cannot_delete_last_admin'));
-      }
-      await box.delete(id);
-      if (getCurrentUserId() == id) await setCurrentUserId(null);
+      await CloudDatabase.usersBox.delete(id);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
     }
   }
 
-  /// Signs in with the login identifier + password.
-  ///
-  /// Returns a failure key so the UI can tell "unknown account" from
-  /// "wrong password" from "account disabled".
-  Either<Failure, AppUser> authenticateByPassword(
-      String email, String password) {
-    final target = AuthHelper.normalizeEmail(email);
-    AppUser? match;
-    for (final raw in HiveDatabase.usersBox.values) {
-      final user = AppUser.fromMap(Map<String, dynamic>.from(raw as Map));
-      if (user.email == target && user.email.isNotEmpty) {
-        match = user;
-        break;
-      }
-    }
-    if (match == null) return const Left(CacheFailure('account_not_found'));
-    if (!match.active) return const Left(CacheFailure('account_disabled'));
-    if (!match.hasPassword) {
-      return const Left(CacheFailure('account_has_no_password'));
-    }
-    if (!AuthHelper.verifyPassword(
-        password, match.passwordSalt, match.passwordHash)) {
-      return const Left(CacheFailure('wrong_password'));
-    }
-    return Right(match);
+  AppUser? getUser(String id) {
+    final raw = CloudDatabase.usersBox.get(id);
+    return raw == null ? null : _toUser(id, raw);
   }
 
-  /// Any account able to sign in with a PIN (drives the PIN tab).
-  bool get hasPinAccounts => HiveDatabase.usersBox.values.any((raw) =>
-      (AppUser.fromMap(Map<String, dynamic>.from(raw as Map))).hasPin);
+  // ------------------------------------------------ legacy local helpers
+  //
+  // Kept for the legacy PIN/password quick-switch code paths. In cloud mode
+  // the router gates everything behind the Firebase login long before these
+  // could run, so they simply report "no match" against member data.
+
+  AppUser? authenticate(String pin) => null;
+
+  /// Legacy email+password gate (the cloud login page replaces it).
+  /// Kept so [SessionController] keeps compiling; never matches in cloud.
+  Either<Failure, AppUser> authenticateByPassword(
+          String email, String password) =>
+      const Left(CacheFailure('cloud_auth_gate'));
+
+  bool get hasPinAccounts => false;
 
   Future<void> stampLogin(AppUser user) async {
-    await HiveDatabase.usersBox
-        .put(user.id, user.copyWith(lastLoginAt: DateTime.now()).toMap());
-  }
-
-  /// Finds the user whose PIN matches, or null.
-  AppUser? authenticate(String pin) {
-    for (final raw in HiveDatabase.usersBox.values) {
-      final user = AppUser.fromMap(Map<String, dynamic>.from(raw as Map));
-      if (user.active &&
-          user.pinHash.isNotEmpty &&
-          PinHelper.verify(pin, user.salt, user.pinHash)) {
-        return user;
-      }
-    }
-    return null;
+    final box = CloudDatabase.usersBox;
+    final raw = box.get(user.id);
+    if (raw == null) return;
+    final map = Map<String, dynamic>.from(raw);
+    map['lastLoginAt'] = DateTime.now().toIso8601String();
+    await box.put(user.id, map);
   }
 
   String? getCurrentUserId() =>
-      HiveDatabase.settingsBox.get(_currentUserKey) as String?;
+      CloudDatabase.settingsBox.get(_currentUserKey) as String?;
 
   Future<void> setCurrentUserId(String? id) async {
     if (id == null) {
-      await HiveDatabase.settingsBox.delete(_currentUserKey);
+      await CloudDatabase.settingsBox.delete(_currentUserKey);
     } else {
-      await HiveDatabase.settingsBox.put(_currentUserKey, id);
+      await CloudDatabase.settingsBox.put(_currentUserKey, id);
     }
-  }
-
-  AppUser? getUser(String id) {
-    final raw = HiveDatabase.usersBox.get(id);
-    if (raw == null) return null;
-    return AppUser.fromMap(Map<String, dynamic>.from(raw as Map));
   }
 }

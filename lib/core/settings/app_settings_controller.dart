@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 
 /// Single source of truth for user preferences that affect the whole app:
 /// language, currency symbol, and the PIN lock. All values live in the
@@ -55,7 +55,7 @@ class AppSettingsController extends ValueNotifier<AppSettings> {
   AppSettingsController() : super(_load());
 
   static AppSettings _load() {
-    final box = HiveDatabase.settingsBox;
+    final box = CloudDatabase.settingsBox;
     final code = box.get(_localeKey) as String?;
     return AppSettings(
       locale: code == null || code.isEmpty ? null : Locale(code),
@@ -68,7 +68,7 @@ class AppSettingsController extends ValueNotifier<AppSettings> {
   }
 
   Future<void> setLocale(Locale? locale) async {
-    await HiveDatabase.settingsBox
+    await CloudDatabase.settingsBox
         .put(_localeKey, locale?.languageCode ?? '');
     value = value.copyWith(locale: locale, clearLocale: locale == null);
   }
@@ -78,7 +78,7 @@ class AppSettingsController extends ValueNotifier<AppSettings> {
     bool? symbolBefore,
     int? decimals,
   }) async {
-    final box = HiveDatabase.settingsBox;
+    final box = CloudDatabase.settingsBox;
     if (symbol != null) await box.put(_currencyKey, symbol.trim());
     if (symbolBefore != null) await box.put(_currencyBeforeKey, symbolBefore);
     if (decimals != null) await box.put(_decimalsKey, decimals);
@@ -90,13 +90,35 @@ class AppSettingsController extends ValueNotifier<AppSettings> {
   }
 
   Future<void> setPinEnabled(bool enabled) async {
-    await HiveDatabase.settingsBox.put(_pinEnabledKey, enabled);
+    await CloudDatabase.settingsBox.put(_pinEnabledKey, enabled);
     value = value.copyWith(pinEnabled: enabled);
   }
 
   Future<void> setDecimalQuantities(bool enabled) async {
-    await HiveDatabase.settingsBox.put(_decimalQtyKey, enabled);
+    await CloudDatabase.settingsBox.put(_decimalQtyKey, enabled);
     value = value.copyWith(decimalQuantities: enabled);
+  }
+
+  /// Applies preferences pushed by the cloud (shop settings document).
+  /// Local Hive keys remain the fallback before sign-in; cloud values win
+  /// once attached so every device of the shop shows the same choices.
+  void applyCloud({
+    String? currencySymbol,
+    bool? currencySymbolBefore,
+    int? decimalDigits,
+    bool? decimalQuantities,
+    String? localeCode,
+  }) {
+    value = value.copyWith(
+      currencySymbol: currencySymbol,
+      currencySymbolBefore: currencySymbolBefore,
+      decimalDigits: decimalDigits,
+      decimalQuantities: decimalQuantities,
+      locale: localeCode == null || localeCode.isEmpty
+          ? null
+          : Locale(localeCode),
+      clearLocale: localeCode != null && localeCode.isEmpty,
+    );
   }
 }
 

@@ -1,5 +1,5 @@
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/utils/printer_helper.dart';
 import '../../domain/repositories/printer_repository.dart';
 
@@ -26,24 +26,24 @@ class PrinterRepositoryImpl implements PrinterRepository {
 
   @override
   String? getSavedPrinterMac() {
-    return HiveDatabase.settingsBox.get('printer_mac');
+    return CloudDatabase.settingsBox.get('printer_mac');
   }
 
   @override
   String? getSavedPrinterName() {
-    return HiveDatabase.settingsBox.get('printer_name');
+    return CloudDatabase.settingsBox.get('printer_name');
   }
 
   @override
   Future<void> savePrinterData(String mac, String name) async {
-    await HiveDatabase.settingsBox.put('printer_mac', mac);
-    await HiveDatabase.settingsBox.put('printer_name', name);
+    await CloudDatabase.settingsBox.put('printer_mac', mac);
+    await CloudDatabase.settingsBox.put('printer_name', name);
   }
 
   @override
   Future<void> clearPrinterData() async {
-    await HiveDatabase.settingsBox.delete('printer_mac');
-    await HiveDatabase.settingsBox.delete('printer_name');
+    await CloudDatabase.settingsBox.delete('printer_mac');
+    await CloudDatabase.settingsBox.delete('printer_name');
   }
 
   @override

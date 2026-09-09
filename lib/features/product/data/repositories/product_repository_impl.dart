@@ -1,5 +1,5 @@
 import 'package:fpdart/fpdart.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/error/failure.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -8,7 +8,7 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<Either<Failure, List<Product>>> getProducts() async {
     try {
-      final products = HiveDatabase.productBox.values.toList()
+      final products = CloudDatabase.productBox.values.toList()
         ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       return Right(products);
     } catch (e) {
@@ -19,7 +19,7 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<Either<Failure, Product>> getProductByBarcode(String barcode) async {
     try {
-      final box = HiveDatabase.productBox;
+      final box = CloudDatabase.productBox;
       final trimmed = barcode.trim();
       Product? product;
       for (final p in box.values) {
@@ -49,7 +49,7 @@ class ProductRepositoryImpl implements ProductRepository {
       final stamped = markUpdated
           ? product.copyWith(updatedAt: DateTime.now())
           : product;
-      await HiveDatabase.productBox.put(stamped.id, stamped);
+      await CloudDatabase.productBox.put(stamped.id, stamped);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -59,7 +59,7 @@ class ProductRepositoryImpl implements ProductRepository {
   @override
   Future<Either<Failure, void>> deleteProduct(String id) async {
     try {
-      await HiveDatabase.productBox.delete(id);
+      await CloudDatabase.productBox.delete(id);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -70,7 +70,7 @@ class ProductRepositoryImpl implements ProductRepository {
   Future<Either<Failure, void>> adjustStock(
       String productId, double delta) async {
     try {
-      final box = HiveDatabase.productBox;
+      final box = CloudDatabase.productBox;
       final existing = box.get(productId);
       if (existing == null) return const Right(null);
       if (!existing.trackStock) return const Right(null);

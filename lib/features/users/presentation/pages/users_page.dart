@@ -1,269 +1,265 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
 
+import '../../../../core/cloud/cloud_auth_controller.dart';
+import '../../../../core/cloud/cloud_database.dart';
+import '../../../../core/cloud/firebase_layer.dart';
 import '../../../../core/l10n/app_localizations.dart';
-import '../../../../core/security/session_controller.dart';
-import '../../data/repositories/user_repository.dart';
-import '../../domain/entities/app_user.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/ui_kit.dart';
+import 'user_form_page.dart';
 
-/// Manage cashiers / managers. When multi-user mode is switched on, the app
-/// asks "who is working?" at start-up and each user signs in with a PIN.
-/// Cashiers can sell and look up customers; everything else is admin-only.
+/// Manage the shop's team, cloud side: pending join requests, roles,
+/// activate/deactivate. Data lives at /shops/{shopId}/members and updates
+/// live on every admin device.
 class UsersPage extends StatefulWidget {
-  const UsersPage({super.key});
+  final CloudAuthController controller;
+  const UsersPage({super.key, required this.controller});
 
   @override
   State<UsersPage> createState() => _UsersPageState();
 }
 
 class _UsersPageState extends State<UsersPage> {
-  final _repo = UserRepository();
-  List<AppUser> _users = [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final result = await _repo.getUsers();
-    if (!mounted) return;
-    setState(() {
-      _users = result.getOrElse((_) => []);
-      _loading = false;
-    });
-    sessionController.refresh();
-  }
-
-  void _snack(String text, {Color? color}) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text), backgroundColor: color));
-  }
-
-  Future<void> _openForm({AppUser? existing}) async {
-    final saved = await context.push<bool>('/users/form', extra: existing);
-    if (saved == true && mounted) await _load();
-  }
-
-  Future<void> _delete(AppUser u) async {
-    final l10n = context.l10n;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (d) => AlertDialog(
-        title: Text(l10n.t('delete_user')),
-        content: Text(l10n.t('delete_user_confirm', {'name': u.name})),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(d, false),
-              child: Text(l10n.cancel)),
-          TextButton(
-              onPressed: () => Navigator.pop(d, true),
-              child: Text(l10n.delete,
-                  style: const TextStyle(color: AppTheme.danger))),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    final result = await _repo.deleteUser(u.id);
-    if (!mounted) return;
-    result.fold(
-      (f) => _snack(l10n.t(f.message), color: AppTheme.danger),
-      (_) => _load(),
-    );
-  }
-
-  Future<void> _toggleMultiUser(bool enabled) async {
-    final l10n = context.l10n;
-    if (enabled && !_users.any((u) => u.isAdmin && (u.hasPassword || u.hasPin))) {
-      // Without a usable admin account the owner would lock themselves out.
-      _snack(l10n.t('need_admin_account'), color: AppTheme.danger);
-      return;
-    }
-    await sessionController.setMultiUser(enabled);
-    if (!mounted) return;
-    setState(() {});
-    if (enabled) {
-      // Force the sign-in screen right away.
-      await sessionController.lock();
-      if (mounted) context.go('/login');
-    }
-  }
+  String get _shopId => widget.controller.shopId ?? '';
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final theme = Theme.of(context);
-    final multiUser = sessionController.isMultiUser;
-    final current = sessionController.currentUser;
-
+    final code = FirebaseLayer.shopCodeOf(_shopId);
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.users),
-        leading: IconButton(
-          icon: Icon(Icons.adaptive.arrow_back),
-          onPressed: () =>
-              context.canPop() ? context.pop() : context.go('/settings'),
-        ),
+        title: Text(l10n.t('cloud_users_title')),
+        actions: [
+          IconButton(
+            tooltip: l10n.t('shop_code_label'),
+            onPressed: () => _showShopCode(code),
+            icon: const Icon(Icons.key_rounded),
+          ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.person_add_alt_1),
-        label: Text(l10n.t('add_user')),
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              children: [
-                Card(
-                  child: SwitchListTile(
-                    secondary: const Icon(Icons.groups_outlined),
-                    title: Text(l10n.t('multi_user')),
-                    subtitle: Text(l10n.t('multi_user_hint')),
-                    value: multiUser,
-                    onChanged: _users.isEmpty ? null : _toggleMultiUser,
-                  ),
+      body: ListenableBuilder(
+        listenable: CloudDatabase.usersBox,
+        builder: (context, _) {
+          final box = CloudDatabase.usersBox;
+          final members = <MapEntry<String, Map<String, dynamic>>>[
+            for (final uid in box.keys)
+              MapEntry(uid, Map<String, dynamic>.from(box.get(uid) ?? const {})),
+          ]..sort((a, b) => (a.value['name'] as String? ?? '')
+              .compareTo(b.value['name'] as String? ?? ''));
+
+          if (members.isEmpty) {
+            return EmptyState(
+              icon: Icons.group_outlined,
+              title: l10n.t('no_members_hint'),
+              message: l10n.t('shop_code_hint'),
+            );
+          }
+
+          final pending =
+              members.where((m) => m.value['active'] == false).toList();
+          final active =
+              members.where((m) => m.value['active'] != false).toList();
+          final myUid = widget.controller.profile?.uid;
+
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            children: [
+              // Shop join code card
+              AppCard(
+                color: context.scheme.primaryContainer.withOpacity(0.4),
+                child: Row(
+                  children: [
+                    Icon(Icons.key_rounded, color: context.scheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(l10n.t('shop_code_label'),
+                              style: TextStyle(
+                                  fontSize: 12, color: context.mutedColor)),
+                          Text(code,
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.5)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: l10n.t('copy'),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: code));
+                        showAppSnack(context, l10n.t('copied'));
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 20),
+                    ),
+                  ],
                 ),
-                if (current != null)
-                  Card(
-                    child: ListTile(
-                      leading: const Icon(Icons.badge_outlined),
-                      title: Text(l10n.t('current_user')),
-                      subtitle: Text(
-                          '${current.name} · ${l10n.t(current.role.labelKey)}'),
-                      trailing: TextButton.icon(
-                        onPressed: () => sessionController.lock(),
-                        icon: const Icon(Icons.swap_horiz),
-                        label: Text(l10n.t('switch_user')),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                if (_users.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      children: [
-                        Icon(Icons.people_outline,
-                            size: 64, color: theme.disabledColor),
-                        const SizedBox(height: 12),
-                        Text(l10n.t('no_users_hint'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: theme.disabledColor)),
-                      ],
-                    ),
-                  )
-                else
-                  for (final u in _users)
-                    Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: _RoleStyle.colorFor(u.role)
-                              .withValues(alpha: 0.15),
-                          child: Text(
-                            u.initials,
-                            style: TextStyle(
-                                color: _RoleStyle.colorFor(u.role),
-                                fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        title: Row(
-                          children: [
-                            Flexible(
-                              child: Text(u.name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
-                            ),
-                            if (!u.active) ...[
-                              const SizedBox(width: 6),
-                              AppBadge(
-                                  text: l10n.t('disabled'),
-                                  color: AppTheme.danger),
-                            ],
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${l10n.t(u.role.labelKey)}'
-                              '${u.email.isEmpty ? '' : ' · ${u.email}'}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 3),
-                            Row(
-                              children: [
-                                if (u.hasPassword)
-                                  Padding(
-                                    padding:
-                                        const EdgeInsetsDirectional.only(end: 6),
-                                    child: AppBadge(
-                                        text: l10n.t('password'),
-                                        color: _RoleStyle.colorFor(u.role),
-                                        icon: Icons.lock_outline),
-                                  ),
-                                if (u.hasPin)
-                                  AppBadge(
-                                      text: l10n.t('user_pin'),
-                                      color: AppTheme.info,
-                                      icon: Icons.dialpad_rounded),
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (v) {
-                            if (v == 'edit') _openForm(existing: u);
-                            if (v == 'delete') _delete(u);
-                          },
-                          itemBuilder: (_) => [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.edit_outlined),
-                                title: Text(l10n.edit),
-                              ),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                leading: const Icon(Icons.delete_outline,
-                                    color: AppTheme.danger),
-                                title: Text(l10n.delete,
-                                    style: const TextStyle(color: AppTheme.danger)),
-                              ),
-                            ),
-                          ],
-                        ),
-                        onTap: () => _openForm(existing: u),
-                      ),
-                    ),
+              ),
+              const SizedBox(height: 14),
+
+              if (pending.isNotEmpty) ...[
+                SectionHeader(title: l10n.t('members_pending')),
+                for (final m in pending) _memberTile(m, isPending: true),
+                const SizedBox(height: 14),
               ],
-            ),
+
+              SectionHeader(title: l10n.t('cloud_users_title')),
+              for (final m in active) _memberTile(m, myUid: myUid),
+            ],
+          );
+        },
+      ),
     );
   }
-}
 
-/// Colour per role, shared by the avatar and the badges.
-class _RoleStyle {
-  const _RoleStyle._();
+  void _showShopCode(String code) {
+    final l10n = context.l10n;
+    showDialog(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(l10n.t('shop_code_label')),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(code,
+                style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2)),
+            const SizedBox(height: 12),
+            Text(l10n.t('shop_code_hint'),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.mutedColor, fontSize: 12)),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialog),
+              child: Text(l10n.close)),
+          FilledButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: code));
+              Navigator.pop(dialog);
+            },
+            icon: const Icon(Icons.copy_rounded, size: 18),
+            label: Text(l10n.t('copy')),
+          ),
+        ],
+      ),
+    );
+  }
 
-  static Color colorFor(UserRole role) => switch (role) {
-        UserRole.admin => const Color(0xFF7C3AED),
-        UserRole.accountant => AppTheme.info,
-        UserRole.stockkeeper => AppTheme.warning,
-        UserRole.cashier => AppTheme.success,
-      };
+  Widget _memberTile(MapEntry<String, Map<String, dynamic>> entry,
+      {bool isPending = false, String? myUid}) {
+    final l10n = context.l10n;
+    final m = entry.value;
+    final name = (m['name'] as String?)?.isNotEmpty == true
+        ? m['name'] as String
+        : (m['email'] as String? ?? '—');
+    final roleName = m['role'] as String? ?? 'cashier';
+    final email = m['email'] as String? ?? '';
+    final isMe = myUid == entry.key;
+
+    return AppCard(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: isPending
+                ? context.scheme.errorContainer
+                : context.scheme.primaryContainer,
+            child: Icon(
+                isPending
+                    ? Icons.hourglass_top_rounded
+                    : roleName == 'admin'
+                        ? Icons.admin_panel_settings_outlined
+                        : Icons.person_outline_rounded,
+                color: isPending
+                    ? context.scheme.onErrorContainer
+                    : context.scheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name,
+                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                if (email.isNotEmpty)
+                  Text(email,
+                      style:
+                          TextStyle(fontSize: 12, color: context.mutedColor)),
+              ],
+            ),
+          ),
+          AppBadge(
+            text: l10n.t('role_$roleName'),
+            color: roleName == 'admin'
+                ? context.scheme.primary
+                : context.mutedColor,
+          ),
+          if (!isMe) ...[
+            IconButton(
+              tooltip: l10n.edit,
+              onPressed: () => _editMember(entry),
+              icon: const Icon(Icons.edit_outlined, size: 20),
+            ),
+            IconButton(
+              tooltip: l10n.delete,
+              onPressed: () => _removeMember(entry),
+              icon: Icon(Icons.delete_outline_rounded,
+                  size: 20, color: context.scheme.error),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editMember(MapEntry<String, Map<String, dynamic>> entry) async {
+    final updated = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(
+        builder: (_) => UserFormPage(memberId: entry.key, memberMap: entry.value),
+      ),
+    );
+    if (updated == null || !mounted) return;
+    await FirebaseLayer.saveMember(
+      shopId: _shopId,
+      uid: entry.key,
+      name: updated['name'] as String,
+      role: memberRoleFromName(updated['role'] as String?),
+      active: updated['active'] as bool? ?? true,
+    );
+    if (mounted) showAppSnack(context, context.l10n.t('member_approved'));
+  }
+
+  Future<void> _removeMember(MapEntry<String, Map<String, dynamic>> entry) async {
+    final l10n = context.l10n;
+    final name = (entry.value['name'] as String?) ?? '';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        icon: Icon(Icons.person_remove_outlined, color: context.scheme.error),
+        title: Text(l10n.t('member_remove_q')),
+        content: Text(l10n.t('member_remove_body', {'name': name})),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialog, false),
+              child: Text(l10n.cancel)),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await FirebaseLayer.removeMember(_shopId, entry.key);
+    // The account itself stays in Firebase Auth; it's simply no longer a
+    // member of this shop.
+    if (mounted) showAppSnack(context, l10n.t('member_removed'));
+  }
 }

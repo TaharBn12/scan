@@ -1,4 +1,4 @@
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 
 /// The shop's daily sales target, shown as a live progress bar on the
 /// dashboard. 0 = feature off.
@@ -8,8 +8,8 @@ class DailyGoal {
   static const _key = 'daily_goal';
 
   static double get value =>
-      (HiveDatabase.settingsBox.get(_key) as num?)?.toDouble() ?? 0;
+      (CloudDatabase.settingsBox.get(_key) as num?)?.toDouble() ?? 0;
 
   static Future<void> set(double value) =>
-      HiveDatabase.settingsBox.put(_key, value < 0 ? 0 : value);
+      CloudDatabase.settingsBox.put(_key, value < 0 ? 0 : value);
 }

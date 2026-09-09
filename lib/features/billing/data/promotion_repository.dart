@@ -1,11 +1,11 @@
-import '../../../core/data/hive_database.dart';
+import '../../../core/cloud/cloud_database.dart';
 import '../domain/entities/promotion.dart';
 
 /// Offers live in a plain Hive box (maps, like sales) so they ride along in
 /// backups without any extra work.
 class PromotionRepository {
   List<Promotion> getAll() {
-    final promos = HiveDatabase.promotionsBox.values
+    final promos = CloudDatabase.promotionsBox.values
         .map((raw) => Promotion.fromMap(Map<String, dynamic>.from(raw as Map)))
         .where((p) => p.id.isNotEmpty)
         .toList();
@@ -22,10 +22,10 @@ class PromotionRepository {
       getAll().where((p) => p.isValidOn(now)).toList();
 
   Future<void> save(Promotion promo) async {
-    await HiveDatabase.promotionsBox.put(promo.id, promo.toMap());
+    await CloudDatabase.promotionsBox.put(promo.id, promo.toMap());
   }
 
   Future<void> delete(String id) async {
-    await HiveDatabase.promotionsBox.delete(id);
+    await CloudDatabase.promotionsBox.delete(id);
   }
 }

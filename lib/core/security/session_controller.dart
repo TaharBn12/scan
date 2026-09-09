@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 import '../../features/users/data/repositories/user_repository.dart';
 import '../../features/users/domain/entities/app_user.dart';
 import '../settings/app_settings_controller.dart';
@@ -23,26 +23,40 @@ class SessionController extends ChangeNotifier {
   AppUser? _currentUser;
   bool _unlocked = false;
 
+  /// When the app runs in cloud mode, sign-in is mandatory and the signed-in
+  /// member always drives permissions (multi-user semantics by default).
+  bool _cloudMode = false;
+
   SessionController() {
     final id = _users.getCurrentUserId();
     if (id != null) _currentUser = _users.getUser(id);
+  }
+
+  /// Called by the cloud auth controller on sign-in/out. A null user
+  /// returns to local-only behavior (offline start without session).
+  void setCloudUser(AppUser? user, {bool cloudMode = true}) {
+    _cloudMode = cloudMode;
+    _currentUser = user;
+    _unlocked = user != null;
+    notifyListeners();
   }
 
   AppUser? get currentUser => _currentUser;
 
   /// True as soon as accounts exist and the shop hasn't opted out.
   bool get isMultiUser =>
-      (HiveDatabase.settingsBox.get(_multiUserKey) as bool? ?? false) &&
-      HiveDatabase.usersBox.isNotEmpty;
+      _cloudMode ||
+      ((CloudDatabase.settingsBox.get(_multiUserKey) as bool? ?? false) &&
+          CloudDatabase.usersBox.isNotEmpty);
 
   /// At least one account exists (so the login screen makes sense).
-  bool get hasAccounts => HiveDatabase.usersBox.isNotEmpty;
+  bool get hasAccounts => CloudDatabase.usersBox.isNotEmpty;
 
   /// At least one account can be unlocked with a quick PIN.
   bool get hasPinAccounts => _users.hasPinAccounts;
 
   Future<void> setMultiUser(bool enabled) async {
-    await HiveDatabase.settingsBox.put(_multiUserKey, enabled);
+    await CloudDatabase.settingsBox.put(_multiUserKey, enabled);
     if (!enabled) {
       _currentUser = null;
       await _users.setCurrentUserId(null);

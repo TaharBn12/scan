@@ -10,7 +10,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../core/utils/printer_helper.dart';
 import '../../data/held_cart_store.dart';
 import '../../data/promotion_repository.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 
 part 'billing_event.dart';
 part 'billing_state.dart';
@@ -182,7 +182,7 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
   /// dropped so the till never crashes on stale data.
   Future<void> _onResumeHeldCart(
       ResumeHeldCartEvent event, Emitter<BillingState> emit) async {
-    final box = HiveDatabase.productBox;
+    final box = CloudDatabase.productBox;
     final items = <CartItem>[];
     for (final line in event.cart.lines) {
       final product = box.get(line.productId);
@@ -208,7 +208,7 @@ class BillingBloc extends Bloc<BillingEvent, BillingState> {
     final printerHelper = PrinterHelper();
 
     if (!printerHelper.isConnected) {
-      final savedMac = HiveDatabase.settingsBox.get('printer_mac');
+      final savedMac = CloudDatabase.settingsBox.get('printer_mac');
       if (savedMac != null) {
         final connected = await printerHelper.connect(savedMac);
         if (!connected) {

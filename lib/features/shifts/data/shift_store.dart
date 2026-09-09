@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../core/data/hive_database.dart';
+import '../../../core/cloud/cloud_database.dart';
 
 /// One cashier session at the till ("وردية"): opened with a float of change,
 /// closed with a physical count of the drawer.
@@ -131,7 +131,7 @@ class ShiftStore {
   final ValueNotifier<List<Shift>> history = ValueNotifier<List<Shift>>(const []);
 
   void load() {
-    final all = HiveDatabase.shiftsBox.values
+    final all = CloudDatabase.shiftsBox.values
         .map((raw) => Shift.fromMap(Map<String, dynamic>.from(raw as Map)))
         .where((s) => s.id.isNotEmpty)
         .toList()
@@ -152,7 +152,7 @@ class ShiftStore {
       openedBy: openedBy,
       openingFloat: openingFloat,
     );
-    await HiveDatabase.shiftsBox.put(shift.id, shift.toMap());
+    await CloudDatabase.shiftsBox.put(shift.id, shift.toMap());
     load();
     return shift;
   }
@@ -180,14 +180,14 @@ class ShiftStore {
       invoiceCount: invoiceCount,
       note: note,
     );
-    await HiveDatabase.shiftsBox.put(closed.id, closed.toMap());
+    await CloudDatabase.shiftsBox.put(closed.id, closed.toMap());
     load();
     return closed;
   }
 
   /// Keeps the log from growing forever on a busy till.
   Future<void> prune({int keep = 120}) async {
-    final box = HiveDatabase.shiftsBox;
+    final box = CloudDatabase.shiftsBox;
     if (box.length <= keep) return;
     final all = box.values
         .map((raw) => Shift.fromMap(Map<String, dynamic>.from(raw as Map)))

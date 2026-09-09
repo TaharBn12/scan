@@ -8,7 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/sale.dart';
 import '../bloc/sale_bloc.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
 import '../../../../core/security/manager_approval.dart';
@@ -160,7 +160,7 @@ class _InvoicePageState extends State<InvoicePage> {
     });
     _snack(l10n.t('invoice_saved'), color: AppTheme.success);
 
-    final autoPrint = HiveDatabase.settingsBox.get('auto_print') == true;
+    final autoPrint = CloudDatabase.settingsBox.get('auto_print') == true;
     if (autoPrint) {
       await _print(silentIfNoPrinter: true);
     }
@@ -173,7 +173,7 @@ class _InvoicePageState extends State<InvoicePage> {
     final printerHelper = PrinterHelper();
     try {
       if (!printerHelper.isConnected) {
-        final savedMac = HiveDatabase.settingsBox.get('printer_mac') as String?;
+        final savedMac = CloudDatabase.settingsBox.get('printer_mac') as String?;
         if (savedMac == null || savedMac.isEmpty) {
           if (!silentIfNoPrinter) _snack(l10n.t('no_printer'), color: AppTheme.danger);
           return;

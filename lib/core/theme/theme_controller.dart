@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 import 'app_theme.dart';
 
 /// Everything that changes how the app *looks*: light/dark/system, the accent
@@ -35,7 +35,7 @@ class ThemeController extends ValueNotifier<ThemeSettings> {
   ThemeController() : super(_load());
 
   static ThemeSettings _load() {
-    final box = HiveDatabase.settingsBox;
+    final box = CloudDatabase.settingsBox;
     final saved = box.get(_modeKey) as String?;
     final mode = switch (saved) {
       'dark' => ThemeMode.dark,
@@ -54,17 +54,28 @@ class ThemeController extends ValueNotifier<ThemeSettings> {
 
   void setThemeMode(ThemeMode mode) {
     value = value.copyWith(mode: mode);
-    HiveDatabase.settingsBox.put(_modeKey, mode.name);
+    CloudDatabase.settingsBox.put(_modeKey, mode.name);
   }
 
   void setAccent(String accentId) {
     value = value.copyWith(accentId: accentId);
-    HiveDatabase.settingsBox.put(_accentKey, accentId);
+    CloudDatabase.settingsBox.put(_accentKey, accentId);
   }
 
   void setCompact(bool compact) {
     value = value.copyWith(compact: compact);
-    HiveDatabase.settingsBox.put(_compactKey, compact);
+    CloudDatabase.settingsBox.put(_compactKey, compact);
+  }
+
+  /// Applies the shop's look coming from the cloud. Unlike the setters this
+  /// never writes back locally — writes go to the cloud doc by the settings
+  /// page, and every device then receives them via the live listener.
+  void applyCloud({
+    required ThemeMode mode,
+    required String accentId,
+    required bool compact,
+  }) {
+    value = ThemeSettings(mode: mode, accentId: accentId, compact: compact);
   }
 }
 
