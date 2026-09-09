@@ -12,6 +12,13 @@ const String _kOsmTiles = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const LatLng kDefaultMapCenter = LatLng(28.0, 1.65);
 const double kDefaultCountryZoom = 5.2;
 
+/// Camera jail: the map never pans/zooms outside Algeria 🇩🇿
+/// (south ≈ Tin Zaouatine, north ≈ Annaba coast).
+final LatLngBounds kAlgeriaBounds = LatLngBounds(
+  const LatLng(18.8, -8.9),
+  const LatLng(37.4, 12.2),
+);
+
 class DeliveryMapMarker {
   final String id;
   final LatLng point;
@@ -39,6 +46,10 @@ class DeliveryMap extends StatefulWidget {
   /// Tap-to-place mode (address picking).
   final bool tappable;
 
+  /// Keeps the map centered on the marker with this id as it moves
+  /// (rider-follow mode, like every pro delivery app).
+  final String? followMarkerId;
+
   final MapController? controller;
 
   const DeliveryMap({
@@ -47,6 +58,7 @@ class DeliveryMap extends StatefulWidget {
     this.polyline = const [],
     this.fitMarkers = false,
     this.tappable = false,
+    this.followMarkerId,
     this.controller,
   });
 
@@ -58,6 +70,7 @@ class _DeliveryMapState extends State<DeliveryMap> {
   late final MapController _own = MapController();
   MapController get _controller => widget.controller ?? _own;
   bool _fittedOnce = false;
+  LatLng? _followedAt;
 
   @override
   void dispose() {
@@ -93,12 +106,39 @@ class _DeliveryMapState extends State<DeliveryMap> {
       _fittedOnce = true;
       _fitNow();
     }
+    if (widget.followMarkerId != null) {
+      DeliveryMapMarker? target;
+      for (final m in widget.markers) {
+        if (m.id == widget.followMarkerId) {
+          target = m;
+          break;
+        }
+      }
+      if (target != null) {
+        final moved = _followedAt == null
+            ? double.infinity
+            : const Distance()
+                .as(LengthUnit.Meter, _followedAt!, target.point);
+        // Re-center when the courier moved ≥60 m — smooth, not jittery.
+        if (moved >= 60) {
+          _followedAt = target.point;
+          final pt = target.point;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            try {
+              _controller.move(pt, _controller.camera.zoom);
+            } catch (_) {/* not laid out yet */}
+          });
+        }
+      }
+    }
     final first = widget.markers.isNotEmpty ? widget.markers.first.point : null;
     return FlutterMap(
       mapController: _controller,
       options: MapOptions(
         initialCenter: first ?? kDefaultMapCenter,
         initialZoom: first == null ? kDefaultCountryZoom : 13,
+        cameraConstraint: CameraConstraint.contain(bounds: kAlgeriaBounds),
         interactionOptions: widget.tappable
             ? const InteractionOptions()
             : const InteractionOptions(

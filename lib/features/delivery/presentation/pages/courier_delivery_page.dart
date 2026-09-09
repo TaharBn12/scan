@@ -14,6 +14,7 @@ import '../../../../core/widgets/ui_kit.dart';
 import '../../../users/domain/entities/app_user.dart';
 import '../../data/delivery_repository.dart';
 import '../../data/delivery_stats.dart';
+import '../../data/route_service.dart';
 import '../../domain/entities/delivery.dart';
 import '../widgets/delivery_map.dart';
 import '../widgets/delivery_style.dart';
@@ -38,6 +39,38 @@ class CourierDeliveryPage extends StatefulWidget {
 
 class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
   final _listenables = _PageListenables();
+
+  /// Live road route: fetched from OSRM when the courier moved enough,
+  /// trimmed locally on *every* position tick — that is what makes the
+  /// drawn line visibly shrink while riding.
+  RoadRoute? _route;
+  LatLng? _routeFrom;
+  DateTime? _routeTriedAt;
+  bool _routeFetching = false;
+
+  void _maybeRefreshRoute(LatLng from, LatLng to) {
+    const probe = Distance();
+    final moved = _routeFrom == null
+        ? double.infinity
+        : probe.as(LengthUnit.Meter, _routeFrom!, from);
+    final sinceTry = _routeTriedAt == null
+        ? const Duration(days: 1)
+        : DateTime.now().difference(_routeTriedAt!);
+    // Re-fetch only when the courier strayed ≥120 m from the last anchor
+    // or the route is older than 45 s — local trimming does the rest.
+    if (_route != null && moved < 120 && sinceTry.inSeconds < 45) return;
+    if (_routeFetching) return;
+    _routeFetching = true;
+    _routeTriedAt = DateTime.now();
+    RouteService.fetch(from, to).then((r) {
+      if (r != null && mounted) {
+        setState(() {
+          _route = r;
+          _routeFrom = from;
+        });
+      }
+    }).whenComplete(() => _routeFetching = false);
+  }
 
   @override
   void dispose() {
@@ -90,8 +123,9 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
     final courierLoc = _courierPosition(d.delivererId);
 
     final markers = <DeliveryMapMarker>[];
-    final line = <LatLng>[];
+    var line = <LatLng>[];
     double? km;
+    int? etaMins;
     if (hasDest) {
       markers.add(DeliveryMapMarker(
         id: 'dest',
@@ -110,13 +144,25 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
         label: d.delivererName,
       ));
       if (hasDest) {
-        line
-          ..add(courierLoc)
-          ..add(LatLng(d.destLat!, d.destLng!));
-        km = DeliveryStats.haversineKm(courierLoc.latitude,
-            courierLoc.longitude, d.destLat!, d.destLng!);
+        final dest = LatLng(d.destLat!, d.destLng!);
+        _maybeRefreshRoute(courierLoc, dest);
+        if (_route != null) {
+          final trimmed =
+              RouteService.trimToProgress(_route!.points, courierLoc);
+          line = trimmed.remaining;
+          km = trimmed.metersLeft / 1000;
+          etaMins =
+              (RouteService.secondsLeft(_route!, trimmed.metersLeft) / 60)
+                  .ceil();
+        } else {
+          // Fallback before the first route lands: a plain segment.
+          line = [courierLoc, dest];
+          km = DeliveryStats.haversineKm(courierLoc.latitude,
+              courierLoc.longitude, d.destLat!, d.destLng!);
+        }
       }
     }
+    etaMins ??= km == null ? null : DeliveryStats.etaMinutes(km);
     final next = d.status.nextByDeliverer;
 
     return Scaffold(
@@ -131,8 +177,11 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
                 children: [
                   if (markers.isNotEmpty)
                     Positioned.fill(
-                        child:
-                            DeliveryMap(markers: markers, polyline: line, fitMarkers: true))
+                        child: DeliveryMap(
+                            markers: markers,
+                            polyline: line,
+                            fitMarkers: true,
+                            followMarkerId: 'courier'))
                   else
                     Container(
                       decoration: const BoxDecoration(
@@ -255,7 +304,7 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
                             l10n.t('distance_km', {'km': km.toStringAsFixed(1)})),
                         const SizedBox(width: 8),
                         _chip(Icons.schedule_rounded,
-                            l10n.t('eta_minutes', {'n': '${DeliveryStats.etaMinutes(km)}'})),
+                            l10n.t('eta_minutes', {'n': '$etaMins'})),
                       ],
                     ),
                   ),
