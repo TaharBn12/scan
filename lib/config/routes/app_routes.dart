@@ -40,6 +40,10 @@ import '../../features/sales/domain/entities/sale.dart';
 import '../../features/sales/presentation/pages/return_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
 import '../../features/users/presentation/pages/lock_page.dart';
+import '../../features/delivery/presentation/pages/deliveries_page.dart';
+import '../../features/delivery/presentation/pages/delivery_tracking_page.dart';
+import '../../features/delivery/presentation/pages/courier_home_page.dart';
+import '../../features/delivery/presentation/pages/courier_delivery_page.dart';
 
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
@@ -75,6 +79,11 @@ final router = GoRouter(
       return sessionController.isMultiUser ? '/login' : '/lock';
     }
     if (authRoutes.contains(location)) return '/menu';
+
+    // The courier experience: a deliverer only sees his own screens.
+    if (sessionController.isDeliverer && !location.startsWith('/courier')) {
+      return '/courier';
+    }
 
     // Signed in: every screen checks the role's permissions.
     if (!sessionController.canOpen(location)) return '/menu';
@@ -124,6 +133,33 @@ final router = GoRouter(
             final args = state.extra as InvoiceRouteArgs;
             return InvoicePage(args: args);
           },
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/deliveries',
+      builder: (context, state) => const DeliveriesPage(),
+      routes: [
+        GoRoute(
+          path: 'map',
+          builder: (context, state) => const DeliveryTrackingPage(),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/courier',
+      builder: (context, state) => const CourierHomePage(),
+      routes: [
+        GoRoute(
+          path: 'map',
+          builder: (context, state) => const DeliveryTrackingPage(),
+        ),
+        GoRoute(
+          path: 'detail',
+          builder: (context, state) => CourierDeliveryPage(
+            deliveryId: state.extra as String? ?? '',
+            readOnly: !sessionController.isDeliverer,
+          ),
         ),
       ],
     ),

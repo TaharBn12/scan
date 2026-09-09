@@ -69,6 +69,7 @@ class CloudAuthController extends ChangeNotifier {
   String? _error;
   StreamSubscription<User?>? _sub;
   StreamSubscription? _settingsSub;
+  StreamSubscription? _memberSub;
 
   CloudAuthState get state => _state;
   MemberProfile? get profile => _profile;
@@ -110,6 +111,8 @@ class CloudAuthController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _memberSub?.cancel();
+    _memberSub = null;
     _settingsSub?.cancel();
     CloudDatabase.detach();
     sessionController.setCloudUser(null);
@@ -131,9 +134,11 @@ class CloudAuthController extends ChangeNotifier {
       if (profile == null || !profile.active) {
         _profile = profile;
         _setState(CloudAuthState.pendingApproval);
+        if (profile != null) _startMemberWatch(profile.shopId, user.uid);
         return;
       }
       _profile = profile;
+      _startMemberWatch(profile.shopId, user.uid);
       await CloudDatabase.attach(profile.shopId);
       _applyCloudSettings(profile.shopId);
       _bridgeSession(profile);
@@ -151,6 +156,9 @@ class CloudAuthController extends ChangeNotifier {
     final role = switch (profile.role) {
       MemberRole.admin => UserRole.admin,
       MemberRole.cashier => UserRole.cashier,
+      MemberRole.accountant => UserRole.accountant,
+      MemberRole.stockkeeper => UserRole.stockkeeper,
+      MemberRole.deliverer => UserRole.deliverer,
       MemberRole.viewer => UserRole.accountant,
     };
     sessionController.setCloudUser(AppUser(
@@ -203,6 +211,38 @@ class CloudAuthController extends ChangeNotifier {
     });
   }
 
+  /// Live membership watch: an admin blocking this account (or editing its
+  /// role) lands here within a second — blocked users are kicked out, role
+  /// changes re-gate every screen, and pending joiners auto-enter once the
+  /// admin approves them.
+  void _startMemberWatch(String shopId, String uid) {
+    _memberSub?.cancel();
+    _memberSub =
+        FirebaseLayer.watchMemberProfile(shopId, uid).listen((event) {
+      final v = event.snapshot.value;
+      if (v is! Map) return;
+      final updated = MemberProfile.fromMap(uid, v);
+      final wasReady = _state == CloudAuthState.ready;
+      if (!updated.active) {
+        _profile = updated;
+        if (wasReady) {
+          _settingsSub?.cancel();
+          CloudDatabase.detach();
+          sessionController.setCloudUser(null);
+        }
+        _setState(CloudAuthState.pendingApproval);
+        return;
+      }
+      final roleChanged = _profile?.role != updated.role;
+      _profile = updated;
+      if (roleChanged && wasReady) _bridgeSession(updated);
+      if (!wasReady && _state == CloudAuthState.pendingApproval) {
+        // The admin just approved this device — boot into the app.
+        _onAuthChanged(FirebaseLayer.currentUser);
+      }
+    });
+  }
+
   void _setState(CloudAuthState next) {
     if (_state == next) return;
     _state = next;
@@ -212,6 +252,7 @@ class CloudAuthController extends ChangeNotifier {
   @override
   void dispose() {
     _sub?.cancel();
+    _memberSub?.cancel();
     _settingsSub?.cancel();
     super.dispose();
   }

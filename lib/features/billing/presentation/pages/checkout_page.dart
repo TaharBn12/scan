@@ -19,6 +19,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
 import '../../../../core/utils/cash_change.dart';
 import '../../../../core/utils/money.dart';
+import '../../../delivery/domain/entities/delivery.dart';
+import '../../../delivery/presentation/widgets/checkout_delivery_sheet.dart';
 import '../bloc/billing_bloc.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -70,7 +72,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _reviewInvoice(
-      BuildContext context, BillingState billingState) async {
+      BuildContext context, BillingState billingState,
+      {DeliveryRequest? delivery}) async {
     final l10n = context.l10n;
     if (billingState.cartItems.isEmpty) return;
 
@@ -187,7 +190,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
 
     await context.push('/invoice',
-        extra: InvoiceRouteArgs(sale: sale, isDraft: true));
+        extra:
+            InvoiceRouteArgs(sale: sale, isDraft: true, delivery: delivery));
   }
 
   @override
@@ -426,13 +430,56 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ],
               ),
             ),
-            PrimaryButton(
-              onPressed: () => _reviewInvoice(context, billingState),
-              label: l10n.t('review_invoice'),
-              icon: Icons.receipt_long,
-              isLoading: false,
+            Row(
+              children: [
+                Expanded(
+                  child: PrimaryButton(
+                    onPressed: () => _reviewInvoice(context, billingState),
+                    label: l10n.t('review_invoice'),
+                    icon: Icons.receipt_long,
+                    isLoading: false,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildDeliveryButton(context, billingState),
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Truck button beside "review invoice": collects the delivery details
+  /// and continues straight into the normal invoice flow — the order is
+  /// written to the database when the sale is stored.
+  Widget _buildDeliveryButton(BuildContext context, BillingState state) {
+    final enabled = state.cartItems.isNotEmpty;
+    return Material(
+      color: enabled
+          ? Theme.of(context).colorScheme.tertiaryContainer
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: AppTheme.brMd,
+      child: InkWell(
+        borderRadius: AppTheme.brMd,
+        onTap: !enabled
+            ? null
+            : () async {
+                final request = await showDeliverySheet(context);
+                if (request != null && context.mounted) {
+                  await _reviewInvoice(context, state, delivery: request);
+                }
+              },
+        child: SizedBox(
+          height: 52,
+          width: 56,
+          child: Icon(
+            Icons.delivery_dining_rounded,
+            size: 26,
+            color: enabled
+                ? Theme.of(context).colorScheme.onTertiaryContainer
+                : context.mutedColor,
+          ),
         ),
       ),
     );

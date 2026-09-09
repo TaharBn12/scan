@@ -6,12 +6,18 @@ import 'package:firebase_database/firebase_database.dart';
 import 'cloud_database.dart';
 
 /// A shop member: who the person is and what they are allowed to do.
-enum MemberRole { admin, cashier, viewer }
+enum MemberRole { admin, cashier, accountant, stockkeeper, deliverer, viewer }
 
 MemberRole memberRoleFromName(String? name) {
   switch (name) {
     case 'admin':
       return MemberRole.admin;
+    case 'accountant':
+      return MemberRole.accountant;
+    case 'stockkeeper':
+      return MemberRole.stockkeeper;
+    case 'deliverer':
+      return MemberRole.deliverer;
     case 'viewer':
       return MemberRole.viewer;
     default:
@@ -241,6 +247,34 @@ class FirebaseLayer {
 
   static Future<void> removeMember(String shopId, String uid) =>
       CloudDatabase.shopMember(shopId, uid).remove();
+
+  // ------------------------------------------------------ deliverer state
+
+  /// Delivers toggling themselves in/out of service (or an admin doing it
+  /// for them) — drives the green "on duty" dot everywhere.
+  static Future<void> setDuty(String shopId, String uid, bool onDuty) =>
+      CloudDatabase.ref(shopId, 'members')
+          .child(uid)
+          .update({'onDuty': onDuty, 'dutyAt': ServerValue.timestamp});
+
+  /// Live position of a deliverer, throttled by the app itself.
+  /// Merged under members/{uid}/location so the member doc keeps its shape.
+  static Future<void> updateMemberLocation(
+          String shopId, String uid, double lat, double lng) =>
+      CloudDatabase.ref(shopId, 'members').child(uid).child('location').set({
+        'lat': lat,
+        'lng': lng,
+        'at': ServerValue.timestamp,
+      });
+
+  /// Admin blocking/unblocking an account: a blocked member keeps their
+  /// record but can no longer work (the session watch kicks them out live).
+  static Future<void> setMemberBlocked(String shopId, String uid, bool blocked) =>
+      CloudDatabase.ref(shopId, 'members').child(uid).update({
+        'active': !blocked,
+        'blocked': blocked,
+        'blockedAt': blocked ? ServerValue.timestamp : null,
+      });
 }
 
 /// Maps Firebase error codes to localization keys for friendly messages.

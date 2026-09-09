@@ -106,6 +106,10 @@ class _UserFormPageState extends State<UserFormPage> {
                     value: UserRole.accountant,
                     label: Text(l10n.t('role_accountant')),
                     icon: const Icon(Icons.receipt_long_outlined)),
+                ButtonSegment(
+                    value: UserRole.deliverer,
+                    label: Text(l10n.t('role_deliverer')),
+                    icon: const Icon(Icons.delivery_dining_rounded)),
               ],
               selected: {_role},
               onSelectionChanged: (s) => setState(() => _role = s.first),

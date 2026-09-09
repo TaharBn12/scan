@@ -6,7 +6,9 @@ import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/cloud/firebase_layer.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
+import '../../../delivery/data/delivery_repository.dart';
 import 'user_form_page.dart';
 
 /// Manage the shop's team, cloud side: pending join requests, roles,
@@ -162,6 +164,9 @@ class _UsersPageState extends State<UsersPage> {
     final roleName = m['role'] as String? ?? 'cashier';
     final email = m['email'] as String? ?? '';
     final isMe = myUid == entry.key;
+    final isBlocked = m['blocked'] == true;
+    final isDelivererOnDuty =
+        roleName == 'deliverer' && m['onDuty'] == true;
 
     return AppCard(
       margin: const EdgeInsets.only(bottom: 8),
@@ -195,17 +200,56 @@ class _UsersPageState extends State<UsersPage> {
               ],
             ),
           ),
-          AppBadge(
-            text: l10n.t('role_$roleName'),
-            color: roleName == 'admin'
-                ? context.scheme.primary
-                : context.mutedColor,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              AppBadge(
+                text: isBlocked
+                    ? l10n.t('member_blocked')
+                    : l10n.t('role_$roleName'),
+                color: isBlocked
+                    ? AppTheme.danger
+                    : roleName == 'admin'
+                        ? context.scheme.primary
+                        : roleName == 'deliverer'
+                            ? AppTheme.info
+                            : context.mutedColor,
+              ),
+              if (isDelivererOnDuty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: AppBadge(
+                    text: l10n.t('member_duty_on'),
+                    color: AppTheme.success,
+                    icon: Icons.circle,
+                  ),
+                ),
+            ],
           ),
+          if (!isMe && roleName == 'deliverer')
+            IconButton(
+              tooltip: l10n.t('courier_earnings'),
+              onPressed: () => _showCourierEarnings(entry),
+              icon: Icon(Icons.payments_outlined,
+                  size: 20, color: AppTheme.success),
+            ),
           if (!isMe) ...[
             IconButton(
               tooltip: l10n.edit,
               onPressed: () => _editMember(entry),
               icon: const Icon(Icons.edit_outlined, size: 20),
+            ),
+            IconButton(
+              tooltip: isBlocked
+                  ? l10n.t('unblock_member')
+                  : l10n.t('block_member'),
+              onPressed: () => _toggleBlock(entry),
+              icon: Icon(
+                  isBlocked
+                      ? Icons.lock_open_rounded
+                      : Icons.block_rounded,
+                  size: 20,
+                  color: isBlocked ? AppTheme.success : null),
             ),
             IconButton(
               tooltip: l10n.delete,
@@ -234,6 +278,140 @@ class _UsersPageState extends State<UsersPage> {
       active: updated['active'] as bool? ?? true,
     );
     if (mounted) showAppSnack(context, context.l10n.t('member_approved'));
+  }
+
+  /// Courier earnings + payout settle (admin): totals are computed from
+  /// delivered orders' fees minus recorded payouts.
+  Future<void> _showCourierEarnings(
+      MapEntry<String, Map<String, dynamic>> entry) async {
+    final l10n = context.l10n;
+    final name = (entry.value['name'] as String?)?.isNotEmpty == true
+        ? entry.value['name'] as String
+        : entry.key;
+    final uid = entry.key;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheet) {
+        final amountCtrl = TextEditingController();
+        return Padding(
+          padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              bottom: MediaQuery.of(sheet).viewInsets.bottom + 20),
+          child: StatefulBuilder(
+            builder: (context, sheetSet) {
+              final earned = DeliveryRepository.earnedBy(uid);
+              final paid = DeliveryRepository.paidOutTo(uid);
+              final balance = DeliveryRepository.balanceOf(uid);
+              final count = DeliveryRepository.deliveredCountOf(uid);
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$name — ${l10n.t('courier_earnings')}',
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _earnCell(l10n.t('delivery_status_delivered'), '$count'),
+                      _earnCell(l10n.t('courier_earnings'), Money.format(earned)),
+                      _earnCell(l10n.t('payout_history'), Money.format(paid)),
+                      _earnCell(l10n.t('earnings_balance'), Money.format(balance),
+                          accent: true),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (balance > 0) ...[
+                    Text(l10n.t('settle_payout'),
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: amountCtrl,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(
+                                    decimal: true),
+                            decoration: InputDecoration(
+                              labelText: l10n.t('payout_amount'),
+                              hintText: Money.plain(balance),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        FilledButton(
+                          onPressed: () async {
+                            final amount = double.tryParse(amountCtrl.text
+                                    .trim()
+                                    .replaceAll(',', '.')) ??
+                                0;
+                            if (amount <= 0) return;
+                            await DeliveryRepository.settle(
+                                uid, name, amount, _adminName());
+                            if (!sheet.mounted) return;
+                            showAppSnack(context, l10n.t('payout_recorded'),
+                                icon: Icons.check_circle_outline_rounded,
+                                color: AppTheme.success);
+                            Navigator.of(sheet).pop();
+                          },
+                          child: Text(l10n.t('settle_payout')),
+                        ),
+                      ],
+                    ),
+                  ] else
+                    Text(l10n.t('no_payouts_yet'),
+                        style: TextStyle(
+                            fontSize: 12.5, color: context.mutedColor)),
+                  const SizedBox(height: 8),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _earnCell(String label, String value, {bool accent = false}) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value,
+              style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                  color: accent ? AppTheme.success : null),
+              overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 3),
+          Text(label,
+              style: TextStyle(fontSize: 10.5, color: context.mutedColor),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  String _adminName() => widget.controller.profile?.name ?? '';
+
+  /// Admin blocks/unblocks an account: the blocked member's session watch
+  /// kicks him out within a second, and he cannot sign back in until the
+  /// admin unblocks him here.
+  Future<void> _toggleBlock(MapEntry<String, Map<String, dynamic>> entry) async {
+    final l10n = context.l10n;
+    final nowBlocked = entry.value['blocked'] == true;
+    await FirebaseLayer.setMemberBlocked(_shopId, entry.key, !nowBlocked);
+    if (!mounted) return;
+    showAppSnack(
+      context,
+      nowBlocked ? l10n.t('unblocked_toast') : l10n.t('blocked_toast'),
+      icon: nowBlocked ? Icons.lock_open_rounded : Icons.block_rounded,
+      color: nowBlocked ? AppTheme.success : AppTheme.warning,
+    );
   }
 
   Future<void> _removeMember(MapEntry<String, Map<String, dynamic>> entry) async {

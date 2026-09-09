@@ -65,6 +65,14 @@ class CloudDatabase {
   static final CloudBox<Map> shiftsBox = _mapBox('shifts');
   static final CloudBox<Map> promotionsBox = _mapBox('promotions');
 
+  /// Delivery orders (/shops/{shopId}/deliveries) — one live row per order,
+  /// watched simultaneously by the till, the admin tracker and the
+  /// deliverer's phone.
+  static final CloudBox<Map> deliveriesBox = _mapBox('deliveries');
+
+  /// Money the shop hands to its deliverers (/shops/{shopId}/delivery_payouts).
+  static final CloudBox<Map> deliveryPayoutsBox = _mapBox('delivery_payouts');
+
   /// Shop members (/shops/{shopId}/members) — the users of legacy Hive now
   /// live cloud-side too (name/role/active per member; secrets stay in
   /// Firebase Auth, never in the database).
@@ -88,6 +96,8 @@ class CloudDatabase {
         heldCartsBox,
         shiftsBox,
         promotionsBox,
+        deliveriesBox,
+        deliveryPayoutsBox,
         usersBox,
       ];
 

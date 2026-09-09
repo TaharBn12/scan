@@ -4,7 +4,7 @@ import 'package:equatable/equatable.dart';
 ///
 /// Roles are deliberately concrete (the four jobs a small shop actually
 /// has) and every screen asks the role, not the user, for permission.
-enum UserRole { admin, accountant, stockkeeper, cashier }
+enum UserRole { admin, accountant, stockkeeper, cashier, deliverer }
 
 extension UserRoleX on UserRole {
   String get labelKey => 'role_$name';
@@ -12,8 +12,11 @@ extension UserRoleX on UserRole {
 
   bool get isAdmin => this == UserRole.admin;
 
-  /// Selling at the till (everybody can serve a customer).
-  bool get canSell => true;
+  /// Selling at the till (everybody but the deliverer).
+  bool get canSell => this != UserRole.deliverer;
+
+  /// The courier experience: own task list, map, duty toggle, earnings.
+  bool get isDeliverer => this == UserRole.deliverer;
 
   /// Reports, profit, Z-report, exports.
   bool get canViewReports =>

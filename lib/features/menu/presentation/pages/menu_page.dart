@@ -8,7 +8,9 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/daily_goal.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../billing/data/held_cart_store.dart';
+import '../../../delivery/data/delivery_repository.dart';
 import '../../../expenses/presentation/bloc/expense_bloc.dart';
 import '../../../inventory/domain/expiry_tracker.dart';
 import '../../../inventory/presentation/bloc/inventory_bloc.dart';
@@ -102,6 +104,18 @@ class MenuPage extends StatelessWidget {
                           onTap: () => context.push('/shift'),
                         ),
                       ),
+                      if (canSeeMoney)
+                        ListenableBuilder(
+                          listenable: CloudDatabase.deliveriesBox,
+                          builder: (context, _) => _ActionCard(
+                            icon: Icons.delivery_dining_rounded,
+                            label: l10n.t('menu_deliveries'),
+                            subtitle: l10n.t('menu_deliveries_subtitle'),
+                            color: const Color(0xFF0D9488),
+                            badge: DeliveryRepository.open().length,
+                            onTap: () => context.push('/deliveries'),
+                          ),
+                        ),
                       _ActionCard(
                         icon: Icons.manage_search_rounded,
                         label: l10n.t('search_everything'),

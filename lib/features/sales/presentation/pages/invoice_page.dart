@@ -9,6 +9,8 @@ import 'package:uuid/uuid.dart';
 import '../../domain/entities/sale.dart';
 import '../bloc/sale_bloc.dart';
 import '../../../../core/cloud/cloud_database.dart';
+import '../../delivery/data/delivery_repository.dart';
+import '../../delivery/domain/entities/delivery.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
 import '../../../../core/security/manager_approval.dart';
@@ -39,7 +41,13 @@ import '../../../shop/presentation/bloc/shop_bloc.dart';
 class InvoiceRouteArgs {
   final Sale sale;
   final bool isDraft;
-  const InvoiceRouteArgs({required this.sale, this.isDraft = false});
+
+  /// Set when the till sent this sale to delivery — the order is created
+  /// in the database right after the sale is stored.
+  final DeliveryRequest? delivery;
+
+  const InvoiceRouteArgs(
+      {required this.sale, this.isDraft = false, this.delivery});
 }
 
 class InvoicePage extends StatefulWidget {
@@ -153,12 +161,22 @@ class _InvoicePageState extends State<InvoicePage> {
     _applyStock(stored, sign: -1, type: StockMovementType.sale);
     context.read<BillingBloc>().add(ClearCartEvent());
 
+    // Delivery order (till pressed the truck icon): the deliverer's phone,
+    // the admin tracker and (later) the customer all see it instantly.
+    var deliveryNote = '';
+    if (widget.args.delivery != null) {
+      try {
+        await DeliveryRepository.createFromSale(stored, widget.args.delivery!);
+        deliveryNote = ' - ' + l10n.t('delivery_created_msg');
+      } catch (_) {/* offline: RTDB replays the write */}
+    }
+
     setState(() {
       _sale = stored;
       _isDraft = false;
       _isSaving = false;
     });
-    _snack(l10n.t('invoice_saved'), color: AppTheme.success);
+    _snack(l10n.t('invoice_saved') + deliveryNote, color: AppTheme.success);
 
     final autoPrint = CloudDatabase.settingsBox.get('auto_print') == true;
     if (autoPrint) {

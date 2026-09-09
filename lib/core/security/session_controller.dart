@@ -86,6 +86,9 @@ class SessionController extends ChangeNotifier {
   bool get canChangeSettings => !isMultiUser || role.canChangeSettings;
   bool get canManageUsers => !isMultiUser || role.canManageUsers;
 
+  /// Courier session: the router funnels him to his own screens.
+  bool get isDeliverer => isMultiUser && role == UserRole.deliverer;
+
   /// Route guard used by the router: which screens this session may open.
   bool canOpen(String location) {
     if (!isMultiUser) return true;
@@ -105,6 +108,10 @@ class SessionController extends ChangeNotifier {
       return canManageProducts;
     }
     if (starts('/customers/debts')) return canManageCustomers;
+    // Delivery board + live tracking: who is trusted with the money view.
+    if (starts('/deliveries')) return canViewReports;
+    // The courier's own screens: himself, or an admin looking over.
+    if (starts('/courier')) return role == UserRole.deliverer || isAdmin;
     return true;
   }
 
