@@ -563,7 +563,8 @@ void main() {
       expect(updated.returnedAmount, closeTo(180, 0.0001));
       expect(updated.effectiveTotal, closeTo(270, 0.0001));
       expect(updated.returnedProfit, closeTo(36, 0.0001));
-      expect(updated.effectiveProfit, closeTo(84, 0.0001));
+      // Profit was 4×20 + 2×10 = 100; handing back 36 leaves 64.
+      expect(updated.effectiveProfit, closeTo(64, 0.0001));
     });
 
     test('stacked returns shrink the returnable quantity', () {
