@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'entities/promotion.dart';
 import 'entities/cart_item.dart';
 

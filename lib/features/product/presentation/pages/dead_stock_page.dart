@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
+import 'package:billing_app/features/product/domain/entities/product.dart';
 import '../../domain/dead_stock_advisor.dart';
 import '../bloc/product_bloc.dart';
 

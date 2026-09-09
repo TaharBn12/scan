@@ -9,6 +9,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
+import 'package:billing_app/features/product/domain/entities/product.dart';
 import '../../domain/expiry_tracker.dart';
 import '../bloc/inventory_bloc.dart';
 

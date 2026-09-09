@@ -836,7 +836,7 @@ class _ReceiptCard extends StatelessWidget {
                 child: SizedBox(
                   width: 92,
                   height: 92,
-                  child: PrettyQrView.data(sale.qrPayload),
+                  child: PrettyQrView.data(data: sale.qrPayload),
                 ),
               ),
             ),
