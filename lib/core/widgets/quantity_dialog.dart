@@ -5,6 +5,7 @@ import '../settings/app_settings_controller.dart';
 import '../utils/app_validators.dart';
 import '../utils/money.dart';
 import '../../features/product/domain/entities/product.dart';
+import '../../core/theme/app_theme.dart';
 
 /// Asks for a quantity (and optionally a per-sale price). Decimal input is
 /// only enabled for units that allow it (kg, g, L, ml, m) when the merchant
@@ -33,7 +34,10 @@ Future<QuantityDialogResult?> showQuantityDialog(
 
 class QuantityDialogResult {
   final double quantity;
-  final double unitPrice;
+
+  /// Null when the cashier kept the catalog default price — the billing bloc
+  /// then applies the automatic pricing rule (retail / wholesale tier).
+  final double? unitPrice;
   const QuantityDialogResult(this.quantity, this.unitPrice);
 }
 
@@ -92,7 +96,11 @@ class _QuantityDialogState extends State<_QuantityDialog> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    Navigator.of(context).pop(QuantityDialogResult(_qty, _price));
+    // Only report a price when it differs from the catalog price, so the
+    // billing bloc can keep applying its automatic pricing rule otherwise.
+    final double? price =
+        (_price == widget.product.price) ? null : _price;
+    Navigator.of(context).pop(QuantityDialogResult(_qty, price));
   }
 
   @override
@@ -114,7 +122,7 @@ class _QuantityDialogState extends State<_QuantityDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${l10n.quantity} ($unit)',
-                style: const TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                style: TextStyle(fontSize: 12, color: context.mutedColor)),
             const SizedBox(height: 6),
             Row(
               children: [
@@ -168,7 +176,7 @@ class _QuantityDialogState extends State<_QuantityDialog> {
               const SizedBox(height: 16),
               Text('${l10n.t('edit_price_for_sale')} (${Money.symbol}/$unit)',
                   style:
-                      const TextStyle(fontSize: 12, color: Color(0xFF4C669A))),
+                      TextStyle(fontSize: 12, color: context.mutedColor)),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _priceCtrl,

@@ -32,13 +32,15 @@ class ProductAdapter extends TypeAdapter<Product> {
       updatedAt: fields[11] == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(fields[11] as int),
+      wholesalePrice: (fields[12] as num?)?.toDouble() ?? 0,
+      wholesaleMinQty: (fields[13] as num?)?.toDouble() ?? 0,
     );
   }
 
   @override
   void write(BinaryWriter writer, Product obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -62,7 +64,11 @@ class ProductAdapter extends TypeAdapter<Product> {
       ..writeByte(10)
       ..write(obj.trackStock)
       ..writeByte(11)
-      ..write(obj.updatedAt?.millisecondsSinceEpoch);
+      ..write(obj.updatedAt?.millisecondsSinceEpoch)
+      ..writeByte(12)
+      ..write(obj.wholesalePrice)
+      ..writeByte(13)
+      ..write(obj.wholesaleMinQty);
   }
 
   @override

@@ -9,6 +9,7 @@ import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Lists saved customers.
 ///
@@ -63,7 +64,7 @@ class _CustomersPageState extends State<CustomersPage> {
                 Navigator.pop(innerContext);
               },
               child: Text(l10n.delete,
-                  style: const TextStyle(color: Colors.red)),
+                  style: const TextStyle(color: AppTheme.danger)),
             ),
           ],
         );
@@ -95,7 +96,7 @@ class _CustomersPageState extends State<CustomersPage> {
             tooltip: l10n.t('debts'),
             icon: Icon(
               _onlyDebtors ? Icons.money_off : Icons.money_off_csred_outlined,
-              color: _onlyDebtors ? Colors.red : null,
+              color: _onlyDebtors ? AppTheme.danger : null,
             ),
             onPressed: () => setState(() => _onlyDebtors = !_onlyDebtors),
           ),
@@ -109,7 +110,7 @@ class _CustomersPageState extends State<CustomersPage> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: l10n.t('search_name_phone'),
-                prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                prefixIcon: Icon(Icons.search, color: context.mutedColor),
                 suffixIcon: _searchQuery.isEmpty
                     ? null
                     : IconButton(
@@ -140,8 +141,8 @@ class _CustomersPageState extends State<CustomersPage> {
                     return false;
                   }
                   if (_searchQuery.isEmpty) return true;
-                  return c.name.toLowerCase().contains(_searchQuery) ||
-                      c.phone.toLowerCase().contains(_searchQuery);
+                  return SearchText.matchesAny(
+                      [c.name, c.phone, c.address], _searchQuery);
                 }).toList()
                   ..sort((a, b) =>
                       a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -187,13 +188,13 @@ class _CustomersPageState extends State<CustomersPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 10),
                         decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.08),
+                          color: AppTheme.danger.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
                           children: [
                             const Icon(Icons.account_balance_wallet_outlined,
-                                color: Colors.red),
+                                color: AppTheme.danger),
                             const SizedBox(width: 10),
                             Expanded(
                                 child: Text(l10n.t('total_outstanding'),
@@ -201,7 +202,7 @@ class _CustomersPageState extends State<CustomersPage> {
                                         fontWeight: FontWeight.w600))),
                             Text(Money.format(totalDebt),
                                 style: const TextStyle(
-                                    color: Colors.red,
+                                    color: AppTheme.danger,
                                     fontWeight: FontWeight.bold)),
                           ],
                         ),
@@ -279,7 +280,7 @@ class _CustomerCard extends StatelessWidget {
               backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
               child: Text(
                 customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.primaryColor, fontWeight: FontWeight.bold),
               ),
             ),
@@ -306,7 +307,7 @@ class _CustomerCard extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: overLimit ? Colors.red : Colors.orange[800]),
+                          color: overLimit ? AppTheme.danger : Colors.orange[800]),
                     ),
                   ],
                 ],
@@ -319,7 +320,7 @@ class _CustomerCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.edit_rounded,
+                    icon: Icon(Icons.edit_rounded,
                         color: AppTheme.primaryColor, size: 20),
                     tooltip: l10n.edit,
                     onPressed: () => context.push(
@@ -328,7 +329,7 @@ class _CustomerCard extends StatelessWidget {
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline_rounded,
-                        color: Colors.red, size: 20),
+                        color: AppTheme.danger, size: 20),
                     tooltip: l10n.delete,
                     onPressed: onDelete,
                   ),

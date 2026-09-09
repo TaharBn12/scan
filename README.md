@@ -1,152 +1,147 @@
-# 🛒 Mobile POS & Billing App 
+# 🛒 Mobile POS & Billing App
 
-A feature-rich, high-performance offline-first billing and Point of Sale (POS) application built with Flutter. Designed for seamless retail checkout operations featuring barcode scanning, thermal Bluetooth printing, and robust local data persistence.
+[![Flutter CI](https://github.com/TaharBn12/scan/actions/workflows/flutter_ci.yml/badge.svg)](https://github.com/TaharBn12/scan/actions/workflows/flutter_ci.yml)
+[![Download APK](https://img.shields.io/badge/download-latest%20APK-brightgreen)](https://github.com/TaharBn12/scan/releases/download/latest/billing_app-latest.apk)
+
+A feature-rich, high-performance **100% offline** billing and Point of Sale (POS) application built with Flutter. Designed for fast retail checkout: barcode scanning, thermal Bluetooth printing, stock, customers, credit, expenses and reports — all stored on the phone.
+
+> **No internet, no account, no website.** The release build does not even request the `INTERNET` permission: every byte of data lives in the shop's phone (Hive), and backups are plain files you own.
 
 ## Screenshot
 
-
 https://github.com/user-attachments/assets/f2d16454-5408-43b3-b207-cd843bbc2c9e
 
+## ✨ What's new in 3.0
 
+### Redesign
+- **New design system** (`lib/core/theme/app_theme.dart`): Material 3 built on one accent colour, neutral slate surfaces, hairline borders, soft elevation, 12/16/20/28 radii and a full set of component themes (cards, inputs, chips, dialogs, sheets, snackbars, segmented buttons, switches…).
+- **6 accent palettes** (Indigo, Emerald, Ocean, Sunset, Rose, Graphite) + light / dark / auto + a **compact layout** switch — all in *Settings → Appearance*, applied instantly across every screen.
+- **Shared UI kit** (`lib/core/widgets/ui_kit.dart`): `AppCard`, `SectionHeader`, `StatTile`, `AppBadge`, `EmptyState`, `GradientHeader`, `GlassIconButton`, `MiniBarChart` — so every screen speaks the same visual language.
+- **Rebuilt till screen**: cleaner scanner overlay with an animated reticle, floating shortcuts, restyled cart rows with a pill stepper, and a pinned checkout bar showing the live total.
 
-## ✨ What's new in 2.0
+### New features
+- **Live dashboard** (the old menu): today's revenue, invoice count and average ticket in the header; KPI tiles for net profit, outstanding credit, today's expenses and low stock; a **7-day revenue bar chart**; then the action grids (cashiers only see the selling section).
+- **Global search** (`/search`): one box that searches products (name / barcode / category), customers (name / phone) and invoices (number / customer / item) instantly and offline — tap a product to add it straight to the cart.
+- **Held (parked) invoices**: park the current cart under a name, serve another customer, then resume it later. Parked carts are persisted, so an app restart never loses the queue.
 
-- **Arabic / French / English UI** with full RTL layout (language switch in Settings, follows the phone by default, Arabic fallback). Currency symbol, decimals and symbol position are configurable (default `DA`).
-- **Share invoices as PDF** (WhatsApp, e‑mail…) with Arabic-capable fonts, in addition to Bluetooth thermal printing. Thermal receipts stay Latin-only because of printer font limits.
-- **Backup to a file** (JSON) with share sheet, restore from file / pasted text, automatic daily local backups (last 7 kept).
-- **Low-stock screen** with per-product threshold and a badge on the menu.
-- **Purchases / stock-in** entries with supplier, cost update and a full stock movement log per product.
-- **Partial debt payments** – credit sales keep a payment history, customers have credit limits and statements.
-- **Reports** with period filter (day / week / month / custom range), daily & monthly bar charts, payment & cashier breakdown, top products, inventory value, Z-report printing and CSV / PDF export.
+### Still there from 2.0
+- **Arabic / French / English UI** with full RTL layout, configurable currency symbol, position and decimals (default `DA`).
+- **Share invoices as PDF** (WhatsApp, e-mail…) with Arabic-capable fonts, plus Bluetooth thermal printing (thermal receipts stay Latin-only because of printer font limits).
+- **Backups**: export/import JSON files, share sheet, restore from file or pasted text, automatic daily local backups (last 7 kept).
+- **Low-stock screen** with per-product thresholds and a badge on the dashboard.
+- **Purchases / stock-in** with supplier, cost update and a full stock-movement log per product.
+- **Partial debt payments** — credit sales keep a payment history, customers have credit limits and statements.
+- **Reports** with period filter (day / week / month / custom), daily & monthly charts, payment and cashier breakdowns, top products, inventory value, Z-report printing and CSV / PDF export.
 - **Units** (piece, kg, g, L, mL, m, box, pack) with decimal quantities for weighed goods.
-- **Two-way website sync** – outbox of changed products / sales / customers / expenses / purchases pushed to your site, product changes pulled back (contract below).
-- **Cloud sync (Firebase)** – paste your own Firebase project config in Settings → Cloud Sync and the same outbox is mirrored to Cloud Firestore in batches, with product changes pulled back (last-write-wins). Works alongside the website sync; both drain one shared queue.
-- **Live web dashboard** (`web-dashboard/`) – a static Arabic dashboard that reads the same Firestore project in real time: today's revenue / invoices / profit, low stock, daily expenses. Host it with Firebase Hosting (or any static host) and put its URL in the app.
 - **App lock with PIN** (auto-lock after 2 min in background) and **multi-user mode** (admin / cashier, each with their own PIN; cashier name stored on every sale).
 - **Daily expenses** with categories → real net profit in reports.
-- **Barcode labels** – A4 PDF sticker sheets or thermal label printing for products without a barcode (auto-generated internal codes).
+- **Barcode labels** — A4 PDF sticker sheets or thermal label printing for products without a barcode.
 
-### Website sync contract
+## 🔒 Privacy & offline guarantees
 
-All requests carry `Authorization: Bearer <token>` (token shown in Settings → Website Sync).
+| | |
+|---|---|
+| Data storage | Hive boxes on the device only |
+| Network calls | none (no HTTP client, no Firebase, no analytics) |
+| Android permissions | camera + Bluetooth (+ location, required by Android for BT scanning). **No `INTERNET` in release builds** |
+| Moving to a new phone | Settings → Data → export the backup file and import it on the new device |
 
-```
-POST <base>/api/sync/push
-  { "token": "...", "changes": [ { "entity": "product|sale|customer|expense|purchase|stock_movement",
-                                   "op": "upsert|delete", "id": "...", "data": { ... } } ] }
-  -> 200 { "ok": true }
+## 🎯 Project scope
 
-GET <base>/api/sync/products?since=<ISO-8601>
-  -> 200 { "products": [ { ...product map... } ], "deleted": [ "id", ... ] }
-```
+A complete offline POS for small and medium retail shops: catalogue, checkout, receipts, customers and credit, purchases, expenses and reporting — all on-device.
 
-## Cloud sync (Firebase) & web dashboard
+## 🛠 Tech stack & architecture
 
-Instead of (or next to) your own website, the app can mirror the same outbox
-to a Cloud Firestore collection in **your own** Firebase project:
+Clean Architecture + feature-driven folders for scalability, separation of concerns and testability.
 
-1. Create a Firebase project, enable **Cloud Firestore**, add a **Web App** and copy its config.
-2. In the app: **Settings → Cloud Sync**, paste the config and save. Every queued
-   change is pushed as `products/{id}`, `sales/{id}`, `customers/{id}`,
-   `expenses/{id}`, `purchases/{id}`, `stock_movements/{id}` (same maps as the
-   website sync), plus `meta/shop` (shop name + currency). Product changes are
-   pulled back with last-write-wins on `updatedAt`.
-3. Host `web-dashboard/` anywhere static (Firebase Hosting is easiest) after
-   pasting the same config into `web-dashboard/firebase-config.js` — it reads
-   the project in real time. See `web-dashboard/README.md` for the full
-   instructions, including recommended Firestore security rules.
-
-No Firebase credentials live in this repository: the config is pasted per
-shop, on the phone.
-
-## 🎯 Project Scope
-
-This application serves as a complete offline POS system for small to medium-sized retail shops. It streamlines the checkout process, catalog management, and receipt generation securely entirely on-device.
-
-### Core Features:
-- **Product Management System**: Complete CRUD operations for inventory items with barcode/QR code support.
-- **Smart Checkout System**: Rapid cart building via camera-based barcode scanning or manual entry, and robust order calculation functionality.
-- **Bluetooth Thermal Printing**: Direct integration with thermal printers (`print_bluetooth_thermal`) to instantly output physical receipts.
-- **Shop Settings & Customization**: Centrally managed shop details printed dynamically on receipts.
-- **Offline-First Architecture**: Powered by `Hive` for lightning-fast localized NoSQL data storage. No active internet connectivity required.
-
-## 🛠 Tech Stack & Architecture
-
-Built leveraging industry-standard architectural principles (Clean Architecture & Feature-Driven Design) ensuring scalability, separation of concerns, and robust testability. 
-
-- **Framework**: [Flutter](https://flutter.dev/) (SDK >=3.1.0)
-- **State Management**: `flutter_bloc`
-- **Dependency Injection**: `get_it`
+- **Framework**: [Flutter](https://flutter.dev/) (SDK >= 3.5)
+- **State management**: `flutter_bloc`
+- **Dependency injection**: `get_it`
 - **Routing**: `go_router`
-- **Local Database**: `hive` & `hive_flutter`
-- **Cloud Sync**: `firebase_core` & `cloud_firestore` (merchant's own project, config pasted in Settings)
-- **Data Modeling**: `json_serializable`, `equatable`
-- **Functional Programming**: `fpdart`
-- **Hardware Integrations**: `mobile_scanner` (barcodes), `print_bluetooth_thermal`
+- **Local database**: `hive` & `hive_flutter`
+- **Data modelling**: `equatable`, hand-written Hive adapters
+- **Functional programming**: `fpdart`
+- **Documents**: `pdf`, `share_plus`, `file_picker`, `path_provider`
+- **Hardware**: `mobile_scanner` (barcodes), `print_bluetooth_thermal` (receipts)
 
-## 📁 File Structure
-
-The codebase is organized using a **Feature-First Clean Architecture** utilizing domain-driven concepts.
+## 📁 File structure
 
 ```text
 lib/
-├── core/                       # Core application utilities and shared components
-│   ├── data/                   # Global data sources (e.g., Hive initialization)
-│   ├── error/                  # Standardized Failure/Exception models (fpdart compatible)
-│   ├── theme/                  # UI aesthetics, typography, styling
-│   ├── usecase/                # Base UseCase contracts
-│   ├── utils/                  # Helpers (e.g., PrinterHelper, formatters)
-│   ├── widgets/                # Reusable global UI widgets (AppBars, generic buttons)
-│   └── service_locator.dart    # get_it dependency injection setup
+├── core/
+│   ├── data/          # Hive initialisation and boxes
+│   ├── error/         # Failure models (fpdart friendly)
+│   ├── l10n/          # ar / fr / en string tables + delegate
+│   ├── pdf/ csv/      # Document and export helpers
+│   ├── security/      # PIN hashing, session/lock controller
+│   ├── settings/      # Language, currency, PIN preferences
+│   ├── theme/         # Design tokens, Material 3 themes, accent controller
+│   ├── utils/         # Money, printer, backup helpers
+│   ├── widgets/       # Shared UI kit (AppCard, StatTile, EmptyState…)
+│   └── service_locator.dart
 │
-└── features/                   # Independent feature modules
-    ├── billing/                # Core POS operations: Cart, Checkout, Invoice Generation
-    ├── product/                # Inventory management: Adding, Listing, Scanning products
-    ├── settings/               # App configuration: Printer connections, App settings
-    └── shop/                   # Shop details configuration
+└── features/
+    ├── billing/       # Till, cart, held carts, checkout
+    ├── customers/     # CRM, credit limits, statements
+    ├── expenses/      # Daily expenses by category
+    ├── inventory/     # Purchases, stock movements
+    ├── labels/        # Barcode label sheets
+    ├── menu/          # Dashboard
+    ├── product/       # Catalogue, low stock, units
+    ├── sales/         # Invoices, reports
+    ├── search/        # Global search
+    ├── settings/      # Appearance, printer, backups, security
+    ├── shop/          # Shop identity used on receipts
+    └── users/         # Multi-user, PIN lock
 ```
 
-*Note: Each feature is further subdivided internally into Clean Architecture layers: `data`, `domain`, and `presentation`.*
+*Each feature is subdivided into `data`, `domain` and `presentation` layers.*
 
-## 💡 Use Cases
+## 💡 Use cases
 
-- **Rapid Billing Entry**: A cashier launches the app, navigates to the checkout page, and uses the device camera to instantly scan product barcodes. The products are added to the cart, the total is calculated including taxes, and a receipt is finalized.
-- **Physical Receipt Generation**: After checkout confirmation, the app triggers a connected external Bluetooth thermal POS printer to instantly print an itemized paper receipt with the shop’s header.
-- **Inventory Sideloading**: A manager opens the Product feature to add new stock to the local database, taking a picture of the barcode to bind the SKU for future lightning-fast checkouts.
-- **No-Connection Operation**: The business operates a stall at an exhibition with poor networking. The app functions entirely via its embedded Hive local database and Bluetooth, completely undisturbed by network drops.
+- **Rapid billing**: the cashier scans barcodes with the camera, the cart builds itself, the total updates live, and the receipt prints over Bluetooth.
+- **Busy counter**: a customer forgets their wallet — park the invoice, serve the next person, resume it in one tap.
+- **Weighed goods**: kg/L products prompt for a decimal quantity and an optional negotiated price.
+- **End of day**: the dashboard shows revenue, net profit and expenses; the reports screen prints a Z-report or exports CSV/PDF.
+- **Zero connectivity**: a market stall with no network runs the whole day unaffected.
 
-## 🚀 Getting Started
+## 🚀 Getting started
 
 ### Prerequisites
-- Flutter SDK `^3.1.0` or higher
-- Android Studio / Xcode for emulators and building.
-- *Optional*: A physical Android/iOS device and a Bluetooth Thermal Printer for testing hardware integrations natively.
+- Flutter SDK 3.5 or newer
+- Android Studio / Xcode for emulators and builds
+- *Optional*: a physical device + Bluetooth thermal printer to test hardware
 
 ### Installation
 
-1. Clone the repository and navigate to the project directory:
-   ```bash
-   git clone <repository_url>
-   cd billing_app
-   ```
+```bash
+git clone <repository_url>
+cd scan
+flutter pub get
+flutter run
+```
 
-2. Fetch dependencies:
-   ```bash
-   flutter pub get
-   ```
+Release APK:
 
-3. Run code generation (required for Hive adapters and JSON serialization):
-   ```bash
-   dart run build_runner build --delete-conflicting-outputs
-   ```
+```bash
+flutter build apk --release
+```
 
-4. Run the project:
-   ```bash
-   flutter run
-   ```
+### Automatic builds
 
-## 🤝 Contributing Guidelines
-As a senior-focused project, please adhere to:
-1. **Clean Architecture Rules**: Maintain strict boundaries between `domain`, `data`, and `presentation` layers.
-2. **Immutable States**: Emit only immutable states from BLoCs utilizing `equatable`.
-3. **No Direct Exceptions in Domain**: Utilize `fpdart`'s `Either<Failure, Type>` pattern to handle control flow for exceptions.
+Every push runs `flutter analyze` + tests and, when they pass, builds a
+release APK and republishes it under the rolling `latest` release — so this
+link always serves the newest build:
+
+**<https://github.com/TaharBn12/scan/releases/download/latest/billing_app-latest.apk>**
+
+Add `[release]` to a commit message to also archive a permanent, versioned
+release (`billing_app-vX.Y.Z-buildN.apk`).
+
+## 🤝 Contributing guidelines
+
+1. **Clean Architecture rules**: keep strict boundaries between `domain`, `data` and `presentation`.
+2. **Immutable states**: BLoCs emit immutable states using `equatable`.
+3. **No exceptions in the domain**: use `fpdart`'s `Either<Failure, T>` for control flow.
+4. **Localise everything**: add new keys to `strings_en.dart`, `strings_ar.dart` and `strings_fr.dart` (a test enforces parity).
+5. **Stay offline**: no dependency that phones home, and no new network permission.

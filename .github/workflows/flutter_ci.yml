@@ -93,7 +93,9 @@ jobs:
 
   build-apk:
     needs: analyze-test
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[build]') }}
+    # Every push builds an installable APK. Pull-request events are skipped
+    # because the branch push already produced the same build.
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -108,10 +110,69 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Build release APK
         run: flutter build apk --release
+
+      - name: Name the artefacts
+        id: apk
+        run: |
+          VERSION=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}')
+          VERSION=${VERSION%%+*}
+          BUILD="billing_app-v${VERSION}-build${GITHUB_RUN_NUMBER}"
+          cp build/app/outputs/flutter-apk/app-release.apk "${BUILD}.apk"
+          # Stable file name so the download link never changes.
+          cp build/app/outputs/flutter-apk/app-release.apk billing_app-latest.apk
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build=${BUILD}" >> "$GITHUB_OUTPUT"
+          ls -lh billing_app-latest.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ steps.apk.outputs.build }}.apk
           retention-days: 30
+
+      # ---- rolling "latest" release: same URL, always the newest build ----
+      - name: Publish the rolling latest build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES=$(printf '%s\n' \
+            "APK auto-built from \`${GITHUB_REF_NAME}\` — commit ${GITHUB_SHA::7}." \
+            "" \
+            "Version ${{ steps.apk.outputs.version }} · build ${GITHUB_RUN_NUMBER} · $(date -u '+%Y-%m-%d %H:%M UTC')" \
+            "" \
+            "Direct download (always the newest build):" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/billing_app-latest.apk")
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest --title "Latest build (v${{ steps.apk.outputs.version }})" \
+              --notes "$NOTES" --target "$GITHUB_SHA"
+          else
+            gh release create latest --title "Latest build (v${{ steps.apk.outputs.version }})" \
+              --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
+          gh release upload latest billing_app-latest.apk --clobber
+          echo "APK: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/billing_app-latest.apk"
+
+      # ---- versioned release, only when the commit asks for one ----
+      - name: Publish a versioned release
+        if: ${{ contains(github.event.head_commit.message, '[release]') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.apk.outputs.build }}"
+          gh release create "$TAG" "${TAG}.apk" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes "Versioned release built from \`${GITHUB_REF_NAME}\` (commit ${GITHUB_SHA::7})." \
+          || gh release upload "$TAG" "${TAG}.apk" --clobber
+
+      - name: Job summary
+        run: |
+          {
+            echo "### 📦 APK ready"
+            echo ""
+            echo "- Version: ${{ steps.apk.outputs.version }} (build ${GITHUB_RUN_NUMBER})"
+            echo "- Download: https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/billing_app-latest.apk"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -14,7 +14,9 @@ class HiveDatabase {
   static const String purchasesBoxName = 'purchases';
   static const String stockMovementsBoxName = 'stock_movements';
   static const String usersBoxName = 'users';
-  static const String syncQueueBoxName = 'sync_queue';
+  static const String heldCartsBoxName = 'held_carts';
+  static const String shiftsBoxName = 'shifts';
+  static const String promotionsBoxName = 'promotions';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -29,15 +31,30 @@ class HiveDatabase {
     await Hive.openBox<Shop>(shopBoxName);
     await Hive.openBox(settingsBoxName); // Generic box for simple key-value
     // Everything else is stored as plain Maps (no TypeAdapter needed) -
-    // simpler, safer to evolve, and trivially JSON-exportable for backups
-    // and website sync.
+    // simpler, safer to evolve, and trivially JSON-exportable for backups.
     await Hive.openBox(salesBoxName);
     await Hive.openBox(customersBoxName);
     await Hive.openBox(expensesBoxName);
     await Hive.openBox(purchasesBoxName);
     await Hive.openBox(stockMovementsBoxName);
     await Hive.openBox(usersBoxName);
-    await Hive.openBox(syncQueueBoxName);
+    // Parked (held) invoices waiting to be resumed at the till.
+    await Hive.openBox(heldCartsBoxName);
+    // Cash-drawer sessions (open float -> counted cash -> variance).
+    await Hive.openBox(shiftsBoxName);
+    // Automatic price offers ("pay 2 take 3", category discounts...).
+    await Hive.openBox(promotionsBoxName);
+
+    // Legacy: the app used to keep an outbox for the removed website /
+    // cloud sync. Drop it so old installs stop carrying dead data.
+    await _deleteLegacyBox('sync_queue');
+  }
+
+  /// Best effort: a missing box (fresh install) must never break startup.
+  static Future<void> _deleteLegacyBox(String name) async {
+    try {
+      await Hive.deleteBoxFromDisk(name);
+    } catch (_) {}
   }
 
   static Box<Product> get productBox => Hive.box<Product>(productBoxName);
@@ -49,5 +66,7 @@ class HiveDatabase {
   static Box get purchasesBox => Hive.box(purchasesBoxName);
   static Box get stockMovementsBox => Hive.box(stockMovementsBoxName);
   static Box get usersBox => Hive.box(usersBoxName);
-  static Box get syncQueueBox => Hive.box(syncQueueBoxName);
+  static Box get heldCartsBox => Hive.box(heldCartsBoxName);
+  static Box get shiftsBox => Hive.box(shiftsBoxName);
+  static Box get promotionsBox => Hive.box(promotionsBoxName);
 }

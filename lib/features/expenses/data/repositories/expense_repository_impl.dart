@@ -1,7 +1,6 @@
 import 'package:fpdart/fpdart.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/repositories/expense_repository.dart';
 
@@ -9,8 +8,8 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   @override
   Future<Either<Failure, List<Expense>>> getExpenses() async {
     try {
-      final list = HiveDatabase.expensesBox.values
-          .map((raw) => Expense.fromMap(Map<String, dynamic>.from(raw as Map)))
+      final list = CloudDatabase.expensesBox.values
+          .map((raw) => Expense.fromMap(raw))
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
       return Right(list);
@@ -23,8 +22,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   Future<Either<Failure, void>> saveExpense(Expense expense) async {
     try {
       final stamped = expense.copyWith(updatedAt: DateTime.now());
-      await HiveDatabase.expensesBox.put(stamped.id, stamped.toMap());
-      await SyncQueue.enqueue('expense', stamped.id, SyncQueue.opUpsert);
+      await CloudDatabase.expensesBox.put(stamped.id, stamped.toMap());
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -34,8 +32,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
   @override
   Future<Either<Failure, void>> deleteExpense(String id) async {
     try {
-      await HiveDatabase.expensesBox.delete(id);
-      await SyncQueue.enqueue('expense', id, SyncQueue.opDelete);
+      await CloudDatabase.expensesBox.delete(id);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

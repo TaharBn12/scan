@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:vibration/vibration.dart';
 
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/theme/app_theme.dart';
 
 class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key});
@@ -75,7 +76,7 @@ class _ScannerPageState extends State<ScannerPage> {
                 width: 250,
                 height: 250,
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.green, width: 2),
+                  border: Border.all(color: AppTheme.success, width: 2),
                   // borderRadius: BorderRadius.circular(16),
                 ),
                 child: Padding(

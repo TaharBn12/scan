@@ -2,7 +2,7 @@ import 'package:intl/intl.dart';
 import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 import 'money.dart';
 
 class EscPos {
@@ -44,7 +44,7 @@ class PrinterHelper {
   /// "paper_width" setting (58/80) chosen in Settings.
   int get charsPerLine {
     try {
-      final width = HiveDatabase.settingsBox.get('paper_width') as int? ?? 58;
+      final width = CloudDatabase.settingsBox.get('paper_width') as int? ?? 58;
       return width >= 80 ? 48 : 32;
     } catch (_) {
       return 32;

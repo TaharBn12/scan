@@ -90,7 +90,7 @@ class CustomerDetailPage extends StatelessWidget {
           children: [
             if (c.phone.isNotEmpty)
               ListTile(
-                leading: const Icon(Icons.chat_outlined, color: Colors.green),
+                leading: const Icon(Icons.chat_outlined, color: AppTheme.success),
                 title: Text(l10n.t('whatsapp')),
                 onTap: () => Navigator.pop(sheet, 'wa'),
               ),
@@ -156,7 +156,7 @@ class CustomerDetailPage extends StatelessWidget {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                 content: Text(l10n.t('pdf_failed', {'error': e})),
-                backgroundColor: Colors.red));
+                backgroundColor: AppTheme.danger));
           }
         }
         break;
@@ -190,7 +190,7 @@ class CustomerDetailPage extends StatelessWidget {
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(l10n.t('marked_as_paid')),
-        backgroundColor: Colors.green));
+        backgroundColor: AppTheme.success));
   }
 
   @override
@@ -275,7 +275,7 @@ class CustomerDetailPage extends StatelessWidget {
                           ),
                           ActionChip(
                             avatar: const Icon(Icons.chat,
-                                size: 18, color: Colors.green),
+                                size: 18, color: AppTheme.success),
                             label: Text(l10n.t('whatsapp')),
                             onPressed: () => _whatsapp(context, c.phone),
                           ),
@@ -290,14 +290,14 @@ class CustomerDetailPage extends StatelessWidget {
                 children: [
                   Expanded(
                       child: _statCard(
-                          l10n.t('total_spent'), totalSpent, Colors.green)),
+                          l10n.t('total_spent'), totalSpent, AppTheme.success)),
                   const SizedBox(width: 12),
                   Expanded(
                       child: _statCard(
                           l10n.t('outstanding_credit'),
                           outstandingCredit,
                           outstandingCredit > 0
-                              ? (overLimit ? Colors.red : Colors.orange)
+                              ? (overLimit ? AppTheme.danger : AppTheme.warning)
                               : Colors.grey)),
                 ],
               ),
@@ -306,7 +306,7 @@ class CustomerDetailPage extends StatelessWidget {
                 Text(
                   l10n.t('credit_limit_exceeded',
                       {'name': c.name, 'limit': Money.format(c.creditLimit)}),
-                  style: const TextStyle(color: Colors.red, fontSize: 12),
+                  style: const TextStyle(color: AppTheme.danger, fontSize: 12),
                 ),
               ],
               if (outstandingCredit > 0) ...[
@@ -326,7 +326,7 @@ class CustomerDetailPage extends StatelessWidget {
                       Expanded(
                         child: FilledButton.icon(
                           style: FilledButton.styleFrom(
-                              backgroundColor: Colors.green),
+                              backgroundColor: AppTheme.success),
                           onPressed: () =>
                               _settleAll(context, c, customerSales),
                           icon: const Icon(Icons.done_all, size: 18),
@@ -411,10 +411,10 @@ class CustomerDetailPage extends StatelessWidget {
       status = sale.amountPaid > 0
           ? '${l10n.t('partially_paid')} · ${l10n.t('remaining')} ${Money.format(sale.amountDue)}'
           : l10n.t('unpaid');
-      statusColor = Colors.red;
+      statusColor = AppTheme.danger;
     } else {
       status = l10n.t('paid');
-      statusColor = Colors.green;
+      statusColor = AppTheme.success;
     }
     return InkWell(
       borderRadius: BorderRadius.circular(10),
@@ -428,7 +428,7 @@ class CustomerDetailPage extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
               color: isUnpaidCredit
-                  ? Colors.red.withValues(alpha: 0.3)
+                  ? AppTheme.danger.withValues(alpha: 0.3)
                   : theme.dividerColor.withValues(alpha: 0.4)),
         ),
         child: Row(

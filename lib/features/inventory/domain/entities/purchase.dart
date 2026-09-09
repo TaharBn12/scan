@@ -7,6 +7,8 @@ class PurchaseItem extends Equatable {
   final double quantity;
   final double unitCost;
   final ProductUnit unit;
+  /// Expiry date of this batch (perishable goods). null = not tracked.
+  final DateTime? expiryDate;
 
   const PurchaseItem({
     required this.productId,
@@ -14,16 +16,24 @@ class PurchaseItem extends Equatable {
     required this.quantity,
     required this.unitCost,
     this.unit = ProductUnit.piece,
+    this.expiryDate,
   });
 
   double get lineTotal => quantity * unitCost;
 
-  PurchaseItem copyWith({double? quantity, double? unitCost}) => PurchaseItem(
+  PurchaseItem copyWith({
+    double? quantity,
+    double? unitCost,
+    DateTime? expiryDate,
+    bool clearExpiry = false,
+  }) =>
+      PurchaseItem(
         productId: productId,
         productName: productName,
         quantity: quantity ?? this.quantity,
         unitCost: unitCost ?? this.unitCost,
         unit: unit,
+        expiryDate: clearExpiry ? null : (expiryDate ?? this.expiryDate),
       );
 
   Map<String, dynamic> toMap() => {
@@ -32,6 +42,7 @@ class PurchaseItem extends Equatable {
         'quantity': quantity,
         'unitCost': unitCost,
         'unit': unit.name,
+        'expiryDate': expiryDate?.toIso8601String(),
       };
 
   factory PurchaseItem.fromMap(Map map) => PurchaseItem(
@@ -40,10 +51,14 @@ class PurchaseItem extends Equatable {
         quantity: (map['quantity'] as num?)?.toDouble() ?? 0,
         unitCost: (map['unitCost'] as num?)?.toDouble() ?? 0,
         unit: ProductUnitX.fromName(map['unit'] as String?),
+        expiryDate: map['expiryDate'] != null
+            ? DateTime.tryParse(map['expiryDate'] as String)
+            : null,
       );
 
   @override
-  List<Object?> get props => [productId, productName, quantity, unitCost, unit];
+  List<Object?> get props =>
+      [productId, productName, quantity, unitCost, unit, expiryDate];
 }
 
 /// Goods received into stock (from a supplier / wholesaler).

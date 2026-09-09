@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/sale.dart';
 import '../bloc/sale_bloc.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
+import '../../../delivery/data/delivery_repository.dart';
+import '../../../delivery/domain/entities/delivery.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
@@ -37,7 +41,13 @@ import '../../../shop/presentation/bloc/shop_bloc.dart';
 class InvoiceRouteArgs {
   final Sale sale;
   final bool isDraft;
-  const InvoiceRouteArgs({required this.sale, this.isDraft = false});
+
+  /// Set when the till sent this sale to delivery — the order is created
+  /// in the database right after the sale is stored.
+  final DeliveryRequest? delivery;
+
+  const InvoiceRouteArgs(
+      {required this.sale, this.isDraft = false, this.delivery});
 }
 
 class InvoicePage extends StatefulWidget {
@@ -144,21 +154,31 @@ class _InvoicePageState extends State<InvoicePage> {
     if (stored == null) {
       setState(() => _isSaving = false);
       final msg = context.read<SaleBloc>().state.message;
-      _snack(msg ?? l10n.error, color: Colors.red);
+      _snack(msg ?? l10n.error, color: AppTheme.danger);
       return;
     }
 
     _applyStock(stored, sign: -1, type: StockMovementType.sale);
     context.read<BillingBloc>().add(ClearCartEvent());
 
+    // Delivery order (till pressed the truck icon): the deliverer's phone,
+    // the admin tracker and (later) the customer all see it instantly.
+    var deliveryNote = '';
+    if (widget.args.delivery != null) {
+      try {
+        await DeliveryRepository.createFromSale(stored, widget.args.delivery!);
+        deliveryNote = ' - ' + l10n.t('delivery_created_msg');
+      } catch (_) {/* offline: RTDB replays the write */}
+    }
+
     setState(() {
       _sale = stored;
       _isDraft = false;
       _isSaving = false;
     });
-    _snack(l10n.t('invoice_saved'), color: Colors.green);
+    _snack(l10n.t('invoice_saved') + deliveryNote, color: AppTheme.success);
 
-    final autoPrint = HiveDatabase.settingsBox.get('auto_print') == true;
+    final autoPrint = CloudDatabase.settingsBox.get('auto_print') == true;
     if (autoPrint) {
       await _print(silentIfNoPrinter: true);
     }
@@ -171,14 +191,14 @@ class _InvoicePageState extends State<InvoicePage> {
     final printerHelper = PrinterHelper();
     try {
       if (!printerHelper.isConnected) {
-        final savedMac = HiveDatabase.settingsBox.get('printer_mac') as String?;
+        final savedMac = CloudDatabase.settingsBox.get('printer_mac') as String?;
         if (savedMac == null || savedMac.isEmpty) {
-          if (!silentIfNoPrinter) _snack(l10n.t('no_printer'), color: Colors.red);
+          if (!silentIfNoPrinter) _snack(l10n.t('no_printer'), color: AppTheme.danger);
           return;
         }
         final connected = await printerHelper.connect(savedMac);
         if (!connected) {
-          _snack(l10n.t('printer_connect_failed'), color: Colors.red);
+          _snack(l10n.t('printer_connect_failed'), color: AppTheme.danger);
           return;
         }
       }
@@ -210,9 +230,9 @@ class _InvoicePageState extends State<InvoicePage> {
         cashierName: _sale.cashierName,
         footer: shop.footerText.isNotEmpty ? shop.footerText : 'Thank you!',
       );
-      _snack(l10n.t('printed_successfully'), color: Colors.green);
+      _snack(l10n.t('printed_successfully'), color: AppTheme.success);
     } catch (e) {
-      _snack(l10n.t('print_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('print_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _isPrinting = false);
     }
@@ -225,7 +245,7 @@ class _InvoicePageState extends State<InvoicePage> {
     try {
       await PdfHelper.shareInvoice(sale: _sale, shop: _shop(), l10n: l10n);
     } catch (e) {
-      _snack(l10n.t('pdf_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('pdf_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -353,17 +373,34 @@ class _InvoicePageState extends State<InvoicePage> {
     final stored = await _persist(updated);
     if (!mounted) return;
     if (stored == null) {
-      _snack(l10n.error, color: Colors.red);
+      _snack(l10n.error, color: AppTheme.danger);
       return;
     }
     setState(() => _sale = stored);
     _snack(
         stored.isPaid ? l10n.t('marked_as_paid') : l10n.t('payment_recorded'),
-        color: Colors.green);
+        color: AppTheme.success);
+  }
+
+  /// Opens the goods-return picker and adopts the updated invoice on return.
+  Future<void> _openReturns() async {
+    final updated =
+        await context.push<Sale>('/returns/new', extra: _sale);
+    if (updated != null && mounted) {
+      setState(() => _sale = updated);
+    }
   }
 
   Future<void> _confirmRefund() async {
     final l10n = context.l10n;
+    // Refunding money out of the drawer is manager territory unless the
+    // person holding the phone already is one.
+    final approved = await ManagerApproval.request(
+      context,
+      reasonKey: 'approval_reason_refund',
+      reasonArgs: {'amount': Money.format(_sale.effectiveTotal)},
+    );
+    if (!approved || !mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
@@ -377,7 +414,7 @@ class _InvoicePageState extends State<InvoicePage> {
           TextButton(
             onPressed: () => Navigator.pop(dialog, true),
             child: Text(l10n.t('refund'),
-                style: const TextStyle(color: Colors.red)),
+                style: const TextStyle(color: AppTheme.danger)),
           ),
         ],
       ),
@@ -389,7 +426,7 @@ class _InvoicePageState extends State<InvoicePage> {
     final stored = await _persist(refunded);
     if (!mounted) return;
     if (stored == null) {
-      _snack(l10n.error, color: Colors.red);
+      _snack(l10n.error, color: AppTheme.danger);
       return;
     }
     _applyStock(stored, sign: 1, type: StockMovementType.refund);
@@ -402,10 +439,16 @@ class _InvoicePageState extends State<InvoicePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isAdmin = sessionController.isAdmin;
-    final canRecordPayment =
-        !_isDraft && _sale.isCredit && !_sale.isPaid && !_sale.isRefunded;
-    final canRefund = !_isDraft && !_sale.isRefunded && isAdmin;
+    final canRecordPayment = !_isDraft &&
+        _sale.isCredit &&
+        !_sale.isPaid &&
+        !_sale.isRefunded &&
+        _sale.amountDue > 0;
+    final canRefund =
+        !_isDraft && !_sale.isRefunded && !_sale.isFullyReturned;
+    final canReturn = !_isDraft &&
+        !_sale.isRefunded &&
+        _sale.items.any((i) => _sale.returnableQuantity(i) > 0);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -458,14 +501,14 @@ class _InvoicePageState extends State<InvoicePage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _ReceiptCard(sale: _sale, shop: _shop()),
+            _ReceiptCard(sale: _sale, shop: _shop(), showQr: !_isDraft),
             if (canRecordPayment) ...[
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: AppTheme.success,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
@@ -477,14 +520,29 @@ class _InvoicePageState extends State<InvoicePage> {
                 ),
               ),
             ],
+            if (canReturn) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12))),
+                  onPressed: _openReturns,
+                  icon: const Icon(Icons.assignment_return_outlined),
+                  label: Text(l10n.t('return_items')),
+                ),
+              ),
+            ],
             if (canRefund) ...[
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: AppTheme.danger,
+                      side: const BorderSide(color: AppTheme.danger),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12))),
@@ -547,7 +605,11 @@ class _InvoicePageState extends State<InvoicePage> {
 class _ReceiptCard extends StatelessWidget {
   final Sale sale;
   final Shop shop;
-  const _ReceiptCard({required this.sale, required this.shop});
+  /// The QR only makes sense once the invoice exists in the records (a
+  /// draft's id is still private to this screen).
+  final bool showQr;
+  const _ReceiptCard(
+      {required this.sale, required this.shop, this.showQr = false});
 
   @override
   Widget build(BuildContext context) {
@@ -709,10 +771,20 @@ class _ReceiptCard extends StatelessWidget {
             ),
           const Divider(height: 24),
           // Totals
-          if (sale.discountAmount > 0) ...[
+          if (sale.discountAmount > 0 || sale.promoDiscount > 0) ...[
             _kv(l10n.subtotal, Money.format(sale.subtotal), muted: muted),
-            _kv(l10n.discount, '- ${Money.format(sale.discountAmount)}',
-                muted: muted, valueColor: Colors.green),
+            if (sale.discountAmount > 0)
+              _kv(l10n.discount, '- ${Money.format(sale.discountAmount)}',
+                  muted: muted, valueColor: AppTheme.success),
+            if (sale.promoDiscount > 0)
+              _kv(
+                sale.promoDescription.isEmpty
+                    ? l10n.t('offers_discount')
+                    : '${l10n.t('offers_discount')} (${sale.promoDescription})',
+                '- ${Money.format(sale.promoDiscount)}',
+                muted: muted,
+                valueColor: AppTheme.success,
+              ),
             const SizedBox(height: 4),
           ],
           Row(
@@ -736,7 +808,7 @@ class _ReceiptCard extends StatelessWidget {
                 muted: muted),
             _kv(l10n.t('remaining'), Money.format(sale.amountDue),
                 muted: muted,
-                valueColor: sale.amountDue > 0 ? Colors.red : Colors.green,
+                valueColor: sale.amountDue > 0 ? AppTheme.danger : AppTheme.success,
                 bold: true),
             if (sale.payments.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -764,6 +836,34 @@ class _ReceiptCard extends StatelessWidget {
             const SizedBox(height: 10),
             Text(l10n.t('note_label', {'note': sale.note}),
                 style: TextStyle(fontSize: 12, color: muted)),
+          ],
+          if (sale.hasReturns) ...[
+            const Divider(height: 24),
+            _ReturnsSection(sale: sale, muted: muted),
+          ],
+          if (showQr) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: muted.withValues(alpha: 0.3)),
+                ),
+                child: SizedBox(
+                  width: 92,
+                  height: 92,
+                  child: PrettyQrView.data(data: sale.qrPayload),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              l10n.t('scan_to_return'),
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10.5, color: muted),
+            ),
           ],
           if (shop.upiId.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -814,17 +914,23 @@ class _StatusChip extends StatelessWidget {
     if (sale.isRefunded) {
       text = l10n.t('refunded');
       color = Colors.grey;
+    } else if (sale.isFullyReturned) {
+      text = l10n.t('fully_returned');
+      color = Colors.grey;
+    } else if (sale.hasReturns) {
+      text = l10n.t('partially_returned');
+      color = AppTheme.info;
     } else if (sale.isCredit && !sale.isPaid) {
       if (sale.amountPaid > 0) {
         text = l10n.t('partially_paid');
-        color = Colors.orange;
+        color = AppTheme.warning;
       } else {
         text = l10n.t('unpaid');
-        color = Colors.red;
+        color = AppTheme.danger;
       }
     } else {
       text = l10n.t('paid');
-      color = Colors.green;
+      color = AppTheme.success;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -836,6 +942,84 @@ class _StatusChip extends StatelessWidget {
       child: Text(text,
           style: TextStyle(
               color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+/// What came back on this invoice: each return with its lines and the money
+/// handed back, plus the effective total the invoice is still worth.
+class _ReturnsSection extends StatelessWidget {
+  final Sale sale;
+  final Color muted;
+  const _ReturnsSection({required this.sale, required this.muted});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final dateFmt = DateFormat('dd/MM/yyyy HH:mm');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.assignment_return_outlined, size: 16, color: muted),
+            const SizedBox(width: 6),
+            Text(l10n.t('returns_section'),
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w700, color: muted)),
+            const Spacer(),
+            Text('-${Money.format(sale.returnedAmount)}',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.danger)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (final ret in sale.returns) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(dateFmt.format(ret.dateTime),
+                  style: TextStyle(fontSize: 11, color: muted)),
+              if ((ret.processedByName ?? '').isNotEmpty)
+                Text(ret.processedByName!,
+                    style: TextStyle(fontSize: 11, color: muted)),
+            ],
+          ),
+          for (final line in ret.lines)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${line.productName} × ${formatQty(line.quantity)}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  Text('-${Money.format(sale.returnValue(SaleReturn(id: ret.id, dateTime: ret.dateTime, lines: [line])))}',
+                      style: TextStyle(
+                          fontSize: 12, color: muted)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(l10n.t('effective_total'),
+                style: const TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w700)),
+            Text(Money.format(sale.effectiveTotal),
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).primaryColor)),
+          ],
+        ),
+      ],
     );
   }
 }

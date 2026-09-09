@@ -10,6 +10,7 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../billing/presentation/bloc/billing_bloc.dart';
 import '../../../../core/widgets/primary_button.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Lists products that were added without a barcode (loose / manual items).
 ///
@@ -50,7 +51,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(context.l10n.t('added_to_invoice', {'name': product.name})),
-        backgroundColor: Colors.green,
+        backgroundColor: AppTheme.success,
         duration: const Duration(milliseconds: 900),
       ),
     );
@@ -88,7 +89,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                 Navigator.pop(innerContext);
               },
               child:
-                  Text(l10n.delete, style: const TextStyle(color: Colors.red)),
+                  Text(l10n.delete, style: const TextStyle(color: AppTheme.danger)),
             ),
           ],
         );
@@ -99,7 +100,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final borderColor = Colors.grey[100]!;
+    final borderColor = context.borderColor;
 
     return Scaffold(
       appBar: AppBar(
@@ -126,7 +127,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: l10n.t('search_by_name'),
-                prefixIcon: Icon(Icons.search, color: Colors.grey[400]),
+                prefixIcon: Icon(Icons.search, color: context.mutedColor),
               ),
             ),
           ),
@@ -140,7 +141,8 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
 
                 final noBarcodeProducts = state.products
                     .where((p) => !p.hasBarcode)
-                    .where((p) => p.name.toLowerCase().contains(_searchQuery))
+                    .where((p) =>
+                        SearchText.matchesAny([p.name, p.category], _searchQuery))
                     .toList();
 
                 if (noBarcodeProducts.isEmpty) {
@@ -151,7 +153,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.inventory_2_outlined,
-                              size: 40, color: Colors.grey[300]),
+                              size: 40, color: context.mutedColor),
                           const SizedBox(height: 12),
                           Text(
                             l10n.t('no_no_barcode_products'),
@@ -240,7 +242,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                   Text(
                     '${Money.format(product.price)} / $unit',
                     style: TextStyle(
-                        fontWeight: FontWeight.w500, color: Colors.grey[600]),
+                        fontWeight: FontWeight.w500, color: context.mutedColor),
                   ),
                 ],
               ),
@@ -264,7 +266,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                         content: Text(l10n
                             .t('added_to_invoice', {'name': product.name})),
-                        backgroundColor: Colors.green,
+                        backgroundColor: AppTheme.success,
                         duration: const Duration(milliseconds: 900),
                       ));
                     },
@@ -284,7 +286,7 @@ class _NoBarcodeProductsPageState extends State<NoBarcodeProductsPage> {
                         extra: product);
                   }),
                   const SizedBox(width: 8),
-                  _iconButton(Icons.delete_outline_rounded, Colors.red,
+                  _iconButton(Icons.delete_outline_rounded, AppTheme.danger,
                       () => _confirmDelete(context, product)),
                 ],
               ),

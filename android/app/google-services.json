@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "588476650085",
+    "firebase_url": "https://livematch-8e189-default-rtdb.firebaseio.com",
+    "project_id": "livematch-8e189",
+    "storage_bucket": "livematch-8e189.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:588476650085:android:d213c875d1033e6edc2c8c",
+        "android_client_info": {
+          "package_name": "com.chatme.ltc"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "588476650085-k4j3bidcu3etatpr7jpa27muvd8laia3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.chatme.ltc",
+            "certificate_hash": "3c853d88f0a82d55b3c2051dae7b230b004a8a1e"
+          }
+        },
+        {
+          "client_id": "588476650085-onutmu7dcpf5t9rn907u7n8qo4ggprc6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYOnFMm3RlrDG54QbnFl4cWmPg3hMTnUg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "588476650085-8sqjr4g26ofkfim2rqc9bts1oc04ij2t.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

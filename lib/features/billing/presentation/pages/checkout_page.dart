@@ -13,10 +13,14 @@ import '../../../customers/domain/entities/customer.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../domain/entities/payment_method.dart';
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/app_validators.dart';
+import '../../../../core/utils/cash_change.dart';
 import '../../../../core/utils/money.dart';
+import '../../../delivery/domain/entities/delivery.dart';
+import '../../../delivery/presentation/widgets/checkout_delivery_sheet.dart';
 import '../bloc/billing_bloc.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -68,15 +72,33 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Future<void> _reviewInvoice(
-      BuildContext context, BillingState billingState) async {
+      BuildContext context, BillingState billingState,
+      {DeliveryRequest? delivery}) async {
     final l10n = context.l10n;
     if (billingState.cartItems.isEmpty) return;
+
+    // Big discounts are a classic till leak: anything beyond the configured
+    // cap makes the cashier call the manager, who approves with their PIN
+    // right on this screen.
+    if (ManagerApproval.isRequired && billingState.discountAmount > 0) {
+      final pct = billingState.subtotal <= 0
+          ? 0.0
+          : billingState.discountAmount / billingState.subtotal * 100;
+      if (pct > ManagerApproval.discountLimitPercent + 0.0001) {
+        final ok = await ManagerApproval.request(
+          context,
+          reasonKey: 'approval_reason_discount',
+          reasonArgs: {'percent': pct.toStringAsFixed(0)},
+        );
+        if (!ok || !context.mounted) return;
+      }
+    }
 
     final isCredit = billingState.paymentMethod == PaymentMethod.credit;
     if (isCredit && billingState.customerId == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(l10n.t('customer_required_for_credit')),
-        backgroundColor: Colors.red,
+        backgroundColor: AppTheme.danger,
       ));
       return;
     }
@@ -148,6 +170,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
           .toList(),
       subtotal: billingState.subtotal,
       discountAmount: billingState.discountAmount,
+      promoDiscount: billingState.promoDiscount,
+      promoDescription:
+          billingState.appliedPromos.map((p) => p.label).join(' · '),
       total: billingState.totalAmount,
       paymentMethod: billingState.paymentMethod,
       isPaid: !isCredit || initialPayment + 0.005 >= billingState.totalAmount,
@@ -165,7 +190,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
 
     await context.push('/invoice',
-        extra: InvoiceRouteArgs(sale: sale, isDraft: true));
+        extra:
+            InvoiceRouteArgs(sale: sale, isDraft: true, delivery: delivery));
   }
 
   @override
@@ -220,6 +246,10 @@ class _CheckoutPageState extends State<CheckoutPage> {
                           _buildItemsTable(context, billingState, borderColor),
                           const SizedBox(height: 16),
                           _buildDiscountSection(context, billingState),
+                          if (billingState.appliedPromos.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            _buildOffersSection(context, billingState),
+                          ],
                           const SizedBox(height: 16),
                           _buildPaymentMethodSection(context, billingState),
                           const SizedBox(height: 16),
@@ -231,7 +261,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                             _buildInitialPaymentSection(context, billingState),
                           const SizedBox(height: 16),
                           _buildNoteSection(context),
-                          const SizedBox(height: 120),
+                          const SizedBox(height: 16),
+                          _buildMarginGuard(context, billingState),
+                          const SizedBox(height: 104),
                         ],
                       ),
                     ),
@@ -250,18 +282,12 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.brMd,
         border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: AppTheme.shadow(Theme.of(context).brightness),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.brMd,
         child: Table(
           columnWidths: const {
             0: FlexColumnWidth(3),
@@ -275,15 +301,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
           children: [
             TableRow(
               decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white10
-                    : const Color(0xFFF8FAFC),
+                color: context.surfaceAltColor,
                 border: Border(bottom: BorderSide(color: borderColor)),
               ),
               children: [
-                _buildHeaderCell(l10n.t('product_name'), TextAlign.start),
-                _buildHeaderCell(l10n.price, TextAlign.end),
-                _buildHeaderCell(l10n.total, TextAlign.end),
+                _buildHeaderCell(context, l10n.t('product_name'), TextAlign.start),
+                _buildHeaderCell(context, l10n.price, TextAlign.end),
+                _buildHeaderCell(context, l10n.total, TextAlign.end),
               ],
             ),
             ...billingState.cartItems.map((item) {
@@ -291,12 +315,15 @@ class _CheckoutPageState extends State<CheckoutPage> {
               return TableRow(
                 children: [
                   _buildDataCell(
+                    context,
                     '${formatQty(item.quantity)} $unit × ${item.product.name}',
                     TextAlign.start,
                   ),
-                  _buildDataCell(Money.format(item.unitPrice), TextAlign.end,
+                  _buildDataCell(
+                      context, Money.format(item.unitPrice), TextAlign.end,
                       isSubtitle: true),
-                  _buildDataCell(Money.format(item.total), TextAlign.end,
+                  _buildDataCell(
+                      context, Money.format(item.total), TextAlign.end,
                       isBold: true),
                 ],
               );
@@ -312,14 +339,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        border: const Border(top: BorderSide(color: Color(0xFFE5E5EA))),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        border: Border(top: BorderSide(color: context.borderColor)),
+        boxShadow: AppTheme.shadow(Theme.of(context).brightness, strong: true),
       ),
       child: SafeArea(
         top: false,
@@ -328,33 +349,59 @@ class _CheckoutPageState extends State<CheckoutPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-              child: Column(
+                child: Column(
                 children: [
-                  if (billingState.discountAmount > 0) ...[
+                  if (billingState.discountAmount > 0 ||
+                      billingState.promoDiscount > 0) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(l10n.subtotal,
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500])),
+                                fontSize: 12, color: context.mutedColor)),
                         Text(Money.format(billingState.subtotal),
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500])),
+                                fontSize: 12, color: context.mutedColor)),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                            '${l10n.discount}${billingState.discountIsPercent ? ' (${formatQty(billingState.discountValue)}%)' : ''}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.orange)),
-                        Text('-${Money.format(billingState.discountAmount)}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.orange)),
-                      ],
-                    ),
+                    if (billingState.discountAmount > 0)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                              '${l10n.discount}${billingState.discountIsPercent ? ' (${formatQty(billingState.discountValue)}%)' : ''}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppTheme.warning)),
+                          Text('-${Money.format(billingState.discountAmount)}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppTheme.warning)),
+                        ],
+                      ),
+                    if (billingState.promoDiscount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.local_offer_outlined,
+                                    size: 13, color: AppTheme.success),
+                                const SizedBox(width: 4),
+                                Text(l10n.t('offers_discount'),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.success)),
+                              ],
+                            ),
+                            Text(
+                                '-${Money.format(billingState.promoDiscount)}',
+                                style: const TextStyle(
+                                    fontSize: 12, color: AppTheme.success)),
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 8),
                   ],
                   Row(
@@ -365,17 +412,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey[400],
+                          color: context.mutedColor,
                           letterSpacing: 1.2,
                         ),
                       ),
                       Text(
                         Money.format(billingState.totalAmount),
                         style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
-                          color: Theme.of(context).colorScheme.onSurface,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                     ],
@@ -383,11 +430,19 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 ],
               ),
             ),
-            PrimaryButton(
-              onPressed: () => _reviewInvoice(context, billingState),
-              label: l10n.t('review_invoice'),
-              icon: Icons.receipt_long,
-              isLoading: false,
+            Row(
+              children: [
+                Expanded(
+                  child: PrimaryButton(
+                    onPressed: () => _reviewInvoice(context, billingState),
+                    label: l10n.t('review_invoice'),
+                    icon: Icons.receipt_long,
+                    isLoading: false,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                _buildDeliveryButton(context, billingState),
+              ],
             ),
           ],
         ),
@@ -395,10 +450,46 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
+  /// Truck button beside "review invoice": collects the delivery details
+  /// and continues straight into the normal invoice flow — the order is
+  /// written to the database when the sale is stored.
+  Widget _buildDeliveryButton(BuildContext context, BillingState state) {
+    final enabled = state.cartItems.isNotEmpty;
+    return Material(
+      color: enabled
+          ? Theme.of(context).colorScheme.tertiaryContainer
+          : Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: AppTheme.brMd,
+      child: InkWell(
+        borderRadius: AppTheme.brMd,
+        onTap: !enabled
+            ? null
+            : () async {
+                final request = await showDeliverySheet(context);
+                if (request != null && context.mounted) {
+                  await _reviewInvoice(context, state, delivery: request);
+                }
+              },
+        child: SizedBox(
+          height: 52,
+          width: 56,
+          child: Icon(
+            Icons.delivery_dining_rounded,
+            size: 26,
+            color: enabled
+                ? Theme.of(context).colorScheme.onTertiaryContainer
+                : context.mutedColor,
+          ),
+        ),
+      ),
+    );
+  }
+
   BoxDecoration _cardDecoration(BuildContext context) => BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E5EA)),
+        borderRadius: AppTheme.brMd,
+        border: Border.all(color: context.borderColor),
+        boxShadow: AppTheme.shadow(Theme.of(context).brightness),
       );
 
   Widget _buildDiscountSection(BuildContext context, BillingState state) {
@@ -443,6 +534,55 @@ class _CheckoutPageState extends State<CheckoutPage> {
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Which offers fired on this bill, so the cashier can answer "why is it
+  /// cheaper?" without guessing.
+  Widget _buildOffersSection(BuildContext context, BillingState state) {
+    final l10n = context.l10n;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration(context).copyWith(
+        border:
+            Border.all(color: AppTheme.success.withValues(alpha: 0.35)),
+        color: AppTheme.success.withValues(alpha: 0.05),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.local_offer_rounded,
+                  size: 16, color: AppTheme.success),
+              const SizedBox(width: 6),
+              Text(l10n.t('offers_applied'),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppTheme.success)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (final promo in state.appliedPromos)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                      child: Text(promo.label,
+                          style: const TextStyle(fontSize: 12))),
+                  Text('-${Money.format(promo.amount)}',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.success)),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -539,10 +679,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: change < 0 ? Colors.red : Colors.green),
+                      color: change < 0 ? AppTheme.danger : AppTheme.success),
                 ),
               ],
             ),
+            if (change > 0) _buildChangeBreakdown(context, change),
           ],
         ],
       ),
@@ -575,7 +716,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
           const SizedBox(height: 4),
           Text(l10n.t('initial_payment_hint'),
-              style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              style: TextStyle(fontSize: 11, color: context.mutedColor)),
           const SizedBox(height: 10),
           TextField(
             controller: _initialPaymentController,
@@ -602,7 +743,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: Colors.orange)),
+                      color: AppTheme.warning)),
             ],
           ),
         ],
@@ -638,8 +779,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
       decoration: _cardDecoration(context).copyWith(
         border: Border.all(
             color: isCredit && !hasSavedCustomer
-                ? Colors.orange
-                : const Color(0xFFE5E5EA)),
+                ? AppTheme.warning
+                : context.borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,7 +813,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(l10n.t('customer_required_for_credit'),
-                  style: const TextStyle(fontSize: 12, color: Colors.orange)),
+                  style:
+                      const TextStyle(fontSize: 12, color: AppTheme.warning)),
             ),
           const SizedBox(height: 4),
           if (hasSavedCustomer)
@@ -723,23 +865,161 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  Widget _buildHeaderCell(String text, TextAlign align) {
+  /// Exactly which notes and coins to hand back — no mental arithmetic
+  /// during a rush.
+  Widget _buildChangeBreakdown(BuildContext context, double change) {
+    final l10n = context.l10n;
+    final parts = CashChange.breakdown(change);
+    if (parts.isEmpty) return const SizedBox.shrink();
+    final leftover = CashChange.remainder(change);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Text(
-        text.toUpperCase(),
-        textAlign: align,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-          color: Colors.grey,
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.savings_outlined,
+                  size: 15, color: context.mutedColor),
+              const SizedBox(width: 6),
+              Text(l10n.t('change_breakdown'),
+                  style: TextStyle(fontSize: 12, color: context.mutedColor)),
+              const Spacer(),
+              Text(
+                  l10n.t('change_pieces',
+                      {'count': CashChange.pieceCount(parts)}),
+                  style: TextStyle(fontSize: 11, color: context.mutedColor)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final part in parts)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                        color: AppTheme.success.withValues(alpha: 0.30)),
+                  ),
+                  child: Text(
+                    '${part.count} × ${Money.format(part.value.toDouble())}',
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.success),
+                  ),
+                ),
+            ],
+          ),
+          if (leftover > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              l10n.t('change_remainder', {'amount': Money.format(leftover)}),
+              style: const TextStyle(fontSize: 11, color: AppTheme.warning),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Live margin guard: shows the profit this invoice will make and shouts
+  /// when a discount (or an edited price) pushes it under the cost price.
+  Widget _buildMarginGuard(BuildContext context, BillingState state) {
+    if (!sessionController.isAdmin || state.cartItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final l10n = context.l10n;
+    double cost = 0;
+    bool missingCost = false;
+    for (final item in state.cartItems) {
+      if (item.product.costPrice <= 0) {
+        missingCost = true;
+      } else {
+        cost += item.product.costPrice * item.quantity;
+      }
+    }
+    if (cost <= 0) return const SizedBox.shrink();
+
+    final profit = state.totalAmount - cost;
+    final margin = state.totalAmount <= 0 ? 0.0 : (profit / state.totalAmount) * 100;
+    final atLoss = profit < -0.005;
+    final color = atLoss
+        ? AppTheme.danger
+        : (margin < 5 ? AppTheme.warning : AppTheme.success);
+    // Silent when the discount is negligible and the margin is healthy.
+    if (!atLoss && margin >= 5 && state.discountAmount <= 0) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: AppTheme.brMd,
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Icon(atLoss ? Icons.trending_down_rounded : Icons.insights_rounded,
+                color: color, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    atLoss
+                        ? l10n.t('selling_at_loss',
+                            {'amount': Money.format(profit.abs())})
+                        : '${l10n.t('expected_profit')}: ${Money.format(profit)}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        color: color),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    [
+                      l10n.t('margin_percent',
+                          {'percent': margin.toStringAsFixed(1)}),
+                      if (missingCost) l10n.t('cost_unknown'),
+                    ].join(' · '),
+                    style:
+                        TextStyle(fontSize: 11, color: context.mutedColor),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildDataCell(String text, TextAlign align,
+  Widget _buildHeaderCell(BuildContext context, String text, TextAlign align) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: Text(
+        text.toUpperCase(),
+        textAlign: align,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+          color: context.mutedColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataCell(BuildContext context, String text, TextAlign align,
       {bool isBold = false, bool isSubtitle = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -749,7 +1029,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
         style: TextStyle(
           fontSize: isSubtitle ? 12 : 14,
           fontWeight: isBold ? FontWeight.bold : FontWeight.w500,
-          color: isSubtitle ? Colors.grey[500] : null,
+          color: isSubtitle ? context.mutedColor : null,
         ),
       ),
     );

@@ -3,7 +3,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 
 /// PIN hashing + the single "app lock" PIN (used when multi-user mode is
 /// off). PINs are stored as salted SHA-256 hashes, never in clear text.
@@ -33,24 +33,24 @@ class PinHelper {
   // ---- app-level lock PIN ----
 
   static bool get hasAppPin =>
-      (HiveDatabase.settingsBox.get(_appPinHashKey) as String?)?.isNotEmpty ??
+      (CloudDatabase.settingsBox.get(_appPinHashKey) as String?)?.isNotEmpty ??
       false;
 
   static Future<void> setAppPin(String pin) async {
     final salt = newSalt();
-    await HiveDatabase.settingsBox.put(_appPinSaltKey, salt);
-    await HiveDatabase.settingsBox.put(_appPinHashKey, hash(pin, salt));
+    await CloudDatabase.settingsBox.put(_appPinSaltKey, salt);
+    await CloudDatabase.settingsBox.put(_appPinHashKey, hash(pin, salt));
   }
 
   static Future<void> clearAppPin() async {
-    await HiveDatabase.settingsBox.delete(_appPinSaltKey);
-    await HiveDatabase.settingsBox.delete(_appPinHashKey);
+    await CloudDatabase.settingsBox.delete(_appPinSaltKey);
+    await CloudDatabase.settingsBox.delete(_appPinHashKey);
   }
 
   static bool verifyAppPin(String pin) {
-    final salt = HiveDatabase.settingsBox.get(_appPinSaltKey) as String? ?? '';
+    final salt = CloudDatabase.settingsBox.get(_appPinSaltKey) as String? ?? '';
     final expected =
-        HiveDatabase.settingsBox.get(_appPinHashKey) as String? ?? '';
+        CloudDatabase.settingsBox.get(_appPinHashKey) as String? ?? '';
     if (expected.isEmpty) return true;
     return verify(pin, salt, expected);
   }

@@ -9,6 +9,7 @@ import '../../../../core/utils/app_validators.dart';
 import '../../../../core/utils/money.dart';
 import '../../domain/entities/expense.dart';
 import '../bloc/expense_bloc.dart';
+import '../../../../core/theme/app_theme.dart';
 
 enum _Period { today, week, month, all }
 
@@ -72,7 +73,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(context.l10n.t('expense_saved')),
-          backgroundColor: Colors.green));
+          backgroundColor: AppTheme.success));
     }
   }
 
@@ -90,7 +91,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
           TextButton(
               onPressed: () => Navigator.pop(d, true),
               child: Text(l10n.delete,
-                  style: const TextStyle(color: Colors.red))),
+                  style: const TextStyle(color: AppTheme.danger))),
         ],
       ),
     );
@@ -280,7 +281,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
                                     padding: const EdgeInsetsDirectional.only(
                                         end: 20),
                                     decoration: BoxDecoration(
-                                        color: Colors.red,
+                                        color: AppTheme.danger,
                                         borderRadius:
                                             BorderRadius.circular(12)),
                                     child: const Icon(Icons.delete,
@@ -519,9 +520,9 @@ class _ExpenseFormState extends State<_ExpenseForm> {
                             .add(DeleteExpense(widget.existing!.id));
                         Navigator.pop(context, false);
                       },
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                      icon: const Icon(Icons.delete_outline, color: AppTheme.danger),
                       label: Text(l10n.delete,
-                          style: const TextStyle(color: Colors.red)),
+                          style: const TextStyle(color: AppTheme.danger)),
                     ),
                   const Spacer(),
                   FilledButton.icon(

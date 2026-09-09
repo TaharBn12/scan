@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../core/l10n/app_localizations.dart';
@@ -16,6 +17,8 @@ import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/purchase.dart';
 import '../bloc/inventory_bloc.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Stock-in screen: pick products (search or scan), enter quantity received
 /// and unit cost, then "Receive" adds everything to stock in one go.
@@ -62,6 +65,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
       product: product,
       quantity: existing?.quantity ?? 1,
       unitCost: existing?.unitCost ?? product.costPrice,
+      expiryDate: existing?.expiryDate,
     );
     if (result == null || !mounted) return;
     setState(() {
@@ -71,6 +75,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
         quantity: result.$1,
         unitCost: result.$2,
         unit: product.unit,
+        expiryDate: result.$3,
       );
       if (existingIndex >= 0) {
         _lines[existingIndex] = line;
@@ -89,10 +94,14 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
       unit: line.unit,
       quantity: line.quantity,
       unitCost: line.unitCost,
+      expiryDate: line.expiryDate,
     );
     if (result == null || !mounted) return;
-    setState(() => _lines[index] =
-        line.copyWith(quantity: result.$1, unitCost: result.$2));
+    setState(() => _lines[index] = line.copyWith(
+        quantity: result.$1,
+        unitCost: result.$2,
+        expiryDate: result.$3,
+        clearExpiry: result.$3 == null));
   }
 
   Product? _findProduct(String id) {
@@ -102,12 +111,13 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
     return null;
   }
 
-  Future<(double, double)?> _editLineDialog({
+  Future<(double, double, DateTime?)?> _editLineDialog({
     Product? product,
     String? name,
     ProductUnit? unit,
     required double quantity,
     required double unitCost,
+    DateTime? expiryDate,
   }) async {
     final l10n = context.l10n;
     final u = unit ?? product?.unit ?? ProductUnit.piece;
@@ -117,76 +127,140 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
     final costCtrl = TextEditingController(
         text: unitCost > 0 ? Money.plain(unitCost) : '');
     final formKey = GlobalKey<FormState>();
+    var expiry = expiryDate;
 
-    return showDialog<(double, double)>(
+    return showDialog<(double, double, DateTime?)>(
       context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(name ?? product?.name ?? l10n.t('select_product'),
-            maxLines: 2, overflow: TextOverflow.ellipsis),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (product != null)
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text(
-                    '${l10n.t('current_stock')}: ${formatQty(product.stock)} ${l10n.t(u.shortKey)}',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).textTheme.bodySmall?.color),
+      builder: (dialog) => StatefulBuilder(
+        builder: (dialog, setLocal) => AlertDialog(
+          title: Text(name ?? product?.name ?? l10n.t('select_product'),
+              maxLines: 2, overflow: TextOverflow.ellipsis),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (product != null)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                      '${l10n.t('current_stock')}: ${formatQty(product.stock)} ${l10n.t(u.shortKey)}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).textTheme.bodySmall?.color),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                TextFormField(
+                  controller: qtyCtrl,
+                  autofocus: true,
+                  keyboardType: TextInputType.numberWithOptions(
+                      decimal: allowDecimals),
+                  decoration: InputDecoration(
+                    labelText: l10n.t('qty_received'),
+                    suffixText: l10n.t(u.shortKey),
+                    border: const OutlineInputBorder(),
+                  ),
+                  validator: (v) {
+                    final base = AppValidators.positiveAmount(l10n)(v);
+                    if (base != null) return base;
+                    final q = parseAmount(v);
+                    if (!allowDecimals && q != q.roundToDouble()) {
+                      return l10n.t('whole_number');
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: costCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(
+                    labelText: l10n.t('unit_cost'),
+                    suffixText: Money.symbol,
+                    border: const OutlineInputBorder(),
+                  ),
+                  validator: AppValidators.optionalAmount(l10n),
+                ),
+                const SizedBox(height: 8),
+                // Expiry of this batch — optional, but it's what feeds the
+                // "about to expire" alerts.
+                InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () async {
+                    final now = DateTime.now();
+                    final picked = await showDatePicker(
+                      context: dialog,
+                      initialDate: expiry ??
+                          now.add(const Duration(days: 90)),
+                      firstDate: now.subtract(const Duration(days: 30)),
+                      lastDate: now.add(const Duration(days: 365 * 10)),
+                    );
+                    if (picked != null) setLocal(() => expiry = picked);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                          color: expiry != null
+                              ? AppTheme.primaryColor
+                              : Theme.of(dialog).dividerColor),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.hourglass_bottom_rounded,
+                          size: 18,
+                          color: expiry != null
+                              ? AppTheme.primaryColor
+                              : Theme.of(dialog).disabledColor,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            expiry == null
+                                ? l10n.t('expiry_optional')
+                                : '${l10n.t('expiry_date')}: '
+                                    '${DateFormat('dd/MM/yyyy').format(expiry!)}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: expiry == null
+                                  ? Theme.of(dialog).disabledColor
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        if (expiry != null)
+                          GestureDetector(
+                            onTap: () => setLocal(() => expiry = null),
+                            child: const Icon(Icons.close, size: 18),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: qtyCtrl,
-                autofocus: true,
-                keyboardType: TextInputType.numberWithOptions(
-                    decimal: allowDecimals),
-                decoration: InputDecoration(
-                  labelText: l10n.t('qty_received'),
-                  suffixText: l10n.t(u.shortKey),
-                  border: const OutlineInputBorder(),
-                ),
-                validator: (v) {
-                  final base = AppValidators.positiveAmount(l10n)(v);
-                  if (base != null) return base;
-                  final q = parseAmount(v);
-                  if (!allowDecimals && q != q.roundToDouble()) {
-                    return l10n.t('whole_number');
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: costCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(
-                  labelText: l10n.t('unit_cost'),
-                  suffixText: Money.symbol,
-                  border: const OutlineInputBorder(),
-                ),
-                validator: AppValidators.optionalAmount(l10n),
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: Text(l10n.cancel)),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.pop(
+                    dialog,
+                    (parseAmount(qtyCtrl.text), parseAmount(costCtrl.text),
+                        expiry));
+              },
+              child: Text(l10n.ok),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialog),
-              child: Text(l10n.cancel)),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() != true) return;
-              Navigator.pop(dialog,
-                  (parseAmount(qtyCtrl.text), parseAmount(costCtrl.text)));
-            },
-            child: Text(l10n.ok),
-          ),
-        ],
       ),
     );
   }
@@ -288,7 +362,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(result?.message ?? l10n.error),
-          backgroundColor: Colors.red));
+          backgroundColor: AppTheme.danger));
       return;
     }
 
@@ -311,7 +385,7 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(l10n.t('purchase_saved')),
-        backgroundColor: Colors.green));
+        backgroundColor: AppTheme.success));
     if (context.canPop()) {
       context.pop();
     } else {
@@ -408,7 +482,8 @@ class _NewPurchasePageState extends State<NewPurchasePage> {
                 child: ListTile(
                   title: Text(_lines[i].productName),
                   subtitle: Text(
-                      '${formatQty(_lines[i].quantity)} ${l10n.t(_lines[i].unit.shortKey)} × ${Money.format(_lines[i].unitCost)}'),
+                      '${formatQty(_lines[i].quantity)} ${l10n.t(_lines[i].unit.shortKey)} × ${Money.format(_lines[i].unitCost)}'
+                      '${_lines[i].expiryDate != null ? ' · ${l10n.t('expiry_short')} ${DateFormat('dd/MM/yy').format(_lines[i].expiryDate!)}' : ''}'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -532,9 +607,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                 builder: (context, state) {
                   final items = state.products.where((p) {
                     if (_query.isEmpty) return true;
-                    return p.name.toLowerCase().contains(_query) ||
-                        p.barcode.contains(_query) ||
-                        p.category.toLowerCase().contains(_query);
+                    return SearchText.matchesAny(
+                        [p.name, p.barcode, p.category], _query);
                   }).toList()
                     ..sort((a, b) =>
                         a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -554,8 +628,8 @@ class _ProductPickerSheetState extends State<_ProductPickerSheet> {
                           style: const TextStyle(fontSize: 12),
                         ),
                         trailing: p.isLowStock
-                            ? Icon(Icons.warning_amber_rounded,
-                                color: Colors.orange.shade700)
+                            ? const Icon(Icons.warning_amber_rounded,
+                                color: AppTheme.warning)
                             : null,
                         onTap: () => Navigator.pop(context, p),
                       );

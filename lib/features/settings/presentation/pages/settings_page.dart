@@ -8,26 +8,29 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart' show DateFormat;
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_auth_controller.dart';
+import '../../../../core/cloud/cloud_database.dart';
+import '../../../../core/cloud/firebase_layer.dart';
 import '../../../../core/l10n/app_localizations.dart';
+import '../../../../core/security/manager_approval.dart';
 import '../../../../core/security/pin_helper.dart';
 import '../../../../core/security/session_controller.dart';
 import '../../../../core/settings/app_settings_controller.dart';
-import '../../../../core/sync/cloud_sync_helper.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_controller.dart';
+import '../../../../core/utils/app_validators.dart';
 import '../../../../core/utils/backup_helper.dart';
+import '../../../../core/utils/daily_goal.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/printer_helper.dart';
-import '../../../../core/utils/sync_helper.dart';
 import '../../../customers/presentation/bloc/customer_bloc.dart';
 import '../../../expenses/presentation/bloc/expense_bloc.dart';
 import '../../../inventory/presentation/bloc/inventory_bloc.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
+import '../../../users/domain/entities/app_user.dart';
 import '../bloc/printer_bloc.dart';
 import '../bloc/printer_event.dart';
 import '../bloc/printer_state.dart';
@@ -40,33 +43,21 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const _appVersion = '2.0.0';
+  static const _appVersion = '4.0.0';
 
-  final TextEditingController _syncUrlController = TextEditingController();
   final TextEditingController _currencyController = TextEditingController();
-  final TextEditingController _cloudConfigController =
-      TextEditingController();
-  final TextEditingController _cloudUrlController = TextEditingController();
-  bool _syncing = false;
-  bool _cloudSyncing = false;
   bool _backingUp = false;
 
   @override
   void initState() {
     super.initState();
     context.read<PrinterBloc>().add(InitPrinterEvent());
-    _syncUrlController.text = SyncHelper.getUrl() ?? '';
     _currencyController.text = appSettings.value.currencySymbol;
-    _cloudConfigController.text = CloudSyncHelper.configJson() ?? '';
-    _cloudUrlController.text = CloudSyncHelper.dashboardUrl() ?? '';
   }
 
   @override
   void dispose() {
-    _syncUrlController.dispose();
     _currencyController.dispose();
-    _cloudConfigController.dispose();
-    _cloudUrlController.dispose();
     super.dispose();
   }
 
@@ -99,9 +90,9 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       final file = await BackupHelper.exportAndShare(subject: l10n.appTitle);
       _snack(l10n.t('backup_saved', {'path': file.path.split('/').last}),
-          color: Colors.green);
+          color: AppTheme.success);
     } catch (e) {
-      _snack(l10n.t('export_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('export_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _backingUp = false);
     }
@@ -110,7 +101,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _copyBackupToClipboard() async {
     final l10n = context.l10n;
     await Clipboard.setData(ClipboardData(text: BackupHelper.exportAsJson()));
-    _snack(l10n.t('backup_copied'), color: Colors.green);
+    _snack(l10n.t('backup_copied'), color: AppTheme.success);
   }
 
   Future<void> _restore(Future<BackupImportSummary> Function() run) async {
@@ -125,9 +116,9 @@ class _SettingsPageState extends State<SettingsPage> {
             'sales': summary.salesImported,
             'customers': summary.customersImported,
           }),
-          color: Colors.green);
+          color: AppTheme.success);
     } catch (_) {
-      _snack(l10n.t('import_failed'), color: Colors.red);
+      _snack(l10n.t('import_failed'), color: AppTheme.danger);
     }
   }
 
@@ -238,234 +229,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  // ---------------------------------------------------------------- sync
-
-  Future<void> _syncNow() async {
-    final l10n = context.l10n;
-    if ((SyncHelper.getUrl() ?? '').trim().isEmpty) {
-      _snack(l10n.t('sync_url_missing'), color: Colors.orange);
-      return;
-    }
-    setState(() => _syncing = true);
-    final result = await SyncHelper.syncAll();
-    if (!mounted) return;
-    setState(() => _syncing = false);
-    if (result.ok) {
-      if (result.pulledProducts > 0) {
-        context.read<ProductBloc>().add(LoadProducts());
-      }
-      _snack(
-          '${l10n.t('sync_success')} · ${l10n.t('sync_summary', {
-                'pushed': result.pushed,
-                'pulled': result.pulledProducts
-              })}',
-          color: Colors.green);
-    } else {
-      _snack(l10n.t('sync_failed', {'error': result.error ?? ''}),
-          color: Colors.red);
-    }
-  }
-
-  Future<void> _resendAll() async {
-    final l10n = context.l10n;
-    await SyncHelper.enqueueEverything();
-    if (!mounted) return;
-    setState(() {});
-    _snack(l10n.t('queued_count', {'count': SyncHelper.pendingCount}),
-        color: Colors.green);
-  }
-
-  // ------------------------------------------------------- cloud (Firebase)
-
-  Future<void> _saveCloudConfig() async {
-    final l10n = context.l10n;
-    try {
-      await CloudSyncHelper.saveConfig(_cloudConfigController.text);
-      if (!mounted) return;
-      setState(() {});
-      _snack(l10n.t('cloud_config_saved',
-          {'project': CloudSyncHelper.projectId() ?? ''}),
-          color: Colors.green);
-    } on FormatException catch (e) {
-      _snack(l10n.t('cloud_config_invalid', {'error': e.message}),
-          color: Colors.red);
-    } catch (e) {
-      _snack(l10n.t('cloud_sync_failed', {'error': e.toString()}),
-          color: Colors.red);
-    }
-  }
-
-  Future<void> _cloudSyncNow() async {
-    final l10n = context.l10n;
-    if (!CloudSyncHelper.hasConfig()) {
-      _snack(l10n.t('cloud_needs_config'), color: Colors.orange);
-      return;
-    }
-    setState(() => _cloudSyncing = true);
-    final result = await CloudSyncHelper.syncAll();
-    if (!mounted) return;
-    setState(() => _cloudSyncing = false);
-    if (result.ok) {
-      if (result.pulledProducts > 0) {
-        context.read<ProductBloc>().add(LoadProducts());
-      }
-      _snack(
-          '${l10n.t('cloud_sync_success')} · ${l10n.t('sync_summary', {
-                'pushed': result.pushed,
-                'pulled': result.pulledProducts
-              })}',
-          color: Colors.green);
-    } else {
-      _snack(l10n.t('cloud_sync_failed', {'error': result.error ?? ''}),
-          color: Colors.red);
-    }
-  }
-
-  Future<void> _openCloudDashboard() async {
-    final raw = _cloudUrlController.text.trim();
-    if (raw.isEmpty) return;
-    final uri = Uri.tryParse(raw);
-    if (uri == null) return;
-    try {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (_) {
-      // No browser / unsupported scheme: best effort only.
-    }
-  }
-
-  Widget _buildCloudSync() {
-    final l10n = context.l10n;
-    final project = CloudSyncHelper.projectId();
-    final configured = project != null && project.isNotEmpty;
-    final last = CloudSyncHelper.lastSyncAt();
-    final lastText = last == null
-        ? l10n.t('never')
-        : DateFormat('dd/MM/yyyy HH:mm').format(last);
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (configured)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.cloud_done, color: Colors.teal, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                        l10n.t('cloud_connected', {'project': project}),
-                        style: const TextStyle(fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-          _label(l10n.t('cloud_config_label')),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _cloudConfigController,
-            maxLines: 5,
-            textDirection: TextDirection.ltr,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-            decoration: InputDecoration(
-              hintText: '{"apiKey": "...", "projectId": "...", ...}',
-              isDense: true,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: _saveCloudConfig,
-                icon: const Icon(Icons.cloud_upload, size: 18),
-                label: Text(l10n.t('cloud_save')),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(l10n.t('cloud_config_hint'),
-                    style: TextStyle(
-                        fontSize: 11,
-                        color:
-                            Theme.of(context).textTheme.bodySmall?.color)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _label(l10n.t('cloud_dashboard_url')),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _cloudUrlController,
-                  keyboardType: TextInputType.url,
-                  textDirection: TextDirection.ltr,
-                  decoration: InputDecoration(
-                    hintText: 'https://my-shop.web.app',
-                    isDense: true,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
-                  onChanged: (v) => CloudSyncHelper.setDashboardUrl(v.trim()),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.open_in_browser, size: 20),
-                tooltip: l10n.t('cloud_open_dashboard'),
-                onPressed: _openCloudDashboard,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (configured) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${l10n.t('cloud_last_sync', {'time': lastText})}\n${l10n.t('sync_pending', {'count': CloudSyncHelper.pendingCount})}',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).textTheme.bodySmall?.color),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: _cloudSyncing ? null : _cloudSyncNow,
-                  icon: _cloudSyncing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.cloud_sync, size: 18),
-                  label: Text(l10n.t('cloud_sync_now')),
-                ),
-              ],
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.t('cloud_auto_sync'),
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text(l10n.t('cloud_auto_sync_hint'),
-                  style: const TextStyle(fontSize: 11)),
-              value: CloudSyncHelper.isAutoSyncEnabled(),
-              onChanged: (v) async {
-                await CloudSyncHelper.setAutoSyncEnabled(v);
-                if (mounted) setState(() {});
-              },
-            ),
-          ],
-          const SizedBox(height: 4),
-          Text(l10n.t('cloud_sync_hint'),
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).textTheme.bodySmall?.color)),
-        ],
-      ),
-    );
-  }
-
   // ----------------------------------------------------------------- PIN
 
   Future<String?> _askPin(String title, {String? hint}) async {
@@ -523,7 +286,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final current = await _askPin(l10n.t('current_pin'));
     if (current == null) return false;
     if (!PinHelper.verifyAppPin(current)) {
-      _snack(l10n.t('wrong_pin'), color: Colors.red);
+      _snack(l10n.t('wrong_pin'), color: AppTheme.danger);
       return false;
     }
     return true;
@@ -538,7 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirm = await _askPin(l10n.t('confirm_pin'));
     if (confirm == null || !mounted) return;
     if (pin != confirm) {
-      _snack(l10n.t('pin_mismatch'), color: Colors.red);
+      _snack(l10n.t('pin_mismatch'), color: AppTheme.danger);
       return;
     }
     await PinHelper.setAppPin(pin);
@@ -546,7 +309,7 @@ class _SettingsPageState extends State<SettingsPage> {
     sessionController.refresh();
     if (!mounted) return;
     setState(() {});
-    _snack(l10n.t('pin_set'), color: Colors.green);
+    _snack(l10n.t('pin_set'), color: AppTheme.success);
   }
 
   Future<void> _removePin() async {
@@ -557,7 +320,7 @@ class _SettingsPageState extends State<SettingsPage> {
     sessionController.refresh();
     if (!mounted) return;
     setState(() {});
-    _snack(l10n.t('pin_removed'), color: Colors.green);
+    _snack(l10n.t('pin_removed'), color: AppTheme.success);
   }
 
   Future<void> _togglePin(bool enabled) async {
@@ -585,7 +348,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final devices = await helper.getBondedDevices();
     if (!mounted) return;
     if (devices.isEmpty) {
-      _snack(l10n.t('no_paired_devices'), color: Colors.orange);
+      _snack(l10n.t('no_paired_devices'), color: AppTheme.warning);
       return;
     }
     await showModalBottomSheet(
@@ -670,7 +433,36 @@ class _SettingsPageState extends State<SettingsPage> {
                   subtitle: l10n.t('users_subtitle'),
                   onTap: () => context.push('/users'),
                 ),
+                if (cloudAuth.state == CloudAuthState.ready)
+                  _tile(
+                    icon: Icons.cloud_done_outlined,
+                    title: l10n.t('cloud_shop_title'),
+                    subtitle:
+                        '${l10n.t('shop_code_label')}: ${FirebaseLayer.shopCodeOf(cloudAuth.shopId ?? '')} · ${l10n.t('cloud_shop_synced')}',
+                    showChevron: false,
+                    onTap: () {},
+                  ),
+                _tile(
+                  icon: Icons.logout_rounded,
+                  title: l10n.t('sign_out'),
+                  subtitle: sessionController.currentUser == null
+                      ? ''
+                      : '${sessionController.currentUser!.name} · '
+                          '${l10n.t(sessionController.currentUser!.role.labelKey)}',
+                  showChevron: false,
+                  onTap: () async {
+                    if (cloudAuth.state != CloudAuthState.configMissing) {
+                      await cloudAuth.signOut();
+                      return; // the router takes us to the cloud login page
+                    }
+                    await sessionController.lock();
+                    if (context.mounted) context.go('/login');
+                  },
+                ),
               ]),
+              const SizedBox(height: 20),
+              _header(l10n.t('appearance')),
+              _buildAppearance(),
               const SizedBox(height: 20),
               _header(l10n.t('general')),
               _card(
@@ -680,31 +472,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     _label(l10n.t('language')),
                     const SizedBox(height: 8),
                     _LanguagePicker(current: settings.locale),
-                    const SizedBox(height: 18),
-                    _label(l10n.t('appearance')),
-                    const SizedBox(height: 8),
-                    ValueListenableBuilder<ThemeMode>(
-                      valueListenable: themeController,
-                      builder: (context, mode, _) => SegmentedButton<ThemeMode>(
-                        segments: [
-                          ButtonSegment(
-                              value: ThemeMode.light,
-                              label: Text(l10n.t('light')),
-                              icon: const Icon(Icons.light_mode)),
-                          ButtonSegment(
-                              value: ThemeMode.dark,
-                              label: Text(l10n.t('dark')),
-                              icon: const Icon(Icons.dark_mode)),
-                          ButtonSegment(
-                              value: ThemeMode.system,
-                              label: Text(l10n.t('auto')),
-                              icon: const Icon(Icons.brightness_auto)),
-                        ],
-                        selected: {mode},
-                        onSelectionChanged: (s) =>
-                            themeController.setThemeMode(s.first),
-                      ),
-                    ),
                     const SizedBox(height: 18),
                     _label(l10n.t('currency')),
                     const SizedBox(height: 8),
@@ -726,6 +493,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             onChanged: (v) {
                               if (v.trim().isNotEmpty) {
                                 appSettings.setCurrency(symbol: v);
+                                patchShopSettings({'currencySymbol': v});
                               }
                             },
                           ),
@@ -749,6 +517,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             onChanged: (v) {
                               if (v != null) {
                                 appSettings.setCurrency(decimals: v);
+                                patchShopSettings({'decimalDigits': v});
                               }
                             },
                           ),
@@ -764,7 +533,10 @@ class _SettingsPageState extends State<SettingsPage> {
                               {'amount': Money.format(1234.5)}),
                           style: const TextStyle(fontSize: 11)),
                       value: settings.currencySymbolBefore,
-                      onChanged: (v) => appSettings.setCurrency(symbolBefore: v),
+                      onChanged: (v) {
+                        appSettings.setCurrency(symbolBefore: v);
+                        patchShopSettings({'currencySymbolBefore': v});
+                      },
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -779,6 +551,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
               ),
               const SizedBox(height: 20),
+              _header(l10n.t('selling_rules')),
+              _buildSelling(),
+              const SizedBox(height: 20),
               _header(l10n.t('security')),
               _buildSecurity(settings),
               const SizedBox(height: 20),
@@ -787,12 +562,6 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 20),
               _header(l10n.t('data')),
               _buildBackup(),
-              const SizedBox(height: 20),
-              _header(l10n.t('website_sync')),
-              _buildSync(),
-              const SizedBox(height: 20),
-              _header(l10n.t('cloud_sync')),
-              _buildCloudSync(),
               const SizedBox(height: 20),
               _header(l10n.t('about')),
               _group([
@@ -832,11 +601,17 @@ class _SettingsPageState extends State<SettingsPage> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor,
+                  gradient: Theme.of(context).brightness == Brightness.dark
+                      ? null
+                      : themeController.accent.gradient,
+                  color: Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.25),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: 0.28),
                       blurRadius: 15,
                       spreadRadius: 3,
                     )
@@ -870,6 +645,141 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  /// Sales-side knobs: the daily target shown on the dashboard and the
+  /// discount ceiling above which a cashier needs the manager's PIN.
+  Widget _buildSelling() {
+    final l10n = context.l10n;
+    final box = CloudDatabase.settingsBox;
+    final goal = (box.get('daily_goal') as num?)?.toDouble() ?? 0;
+    final discountLimit = ManagerApproval.discountLimitPercent;
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.flag_outlined),
+            title: Text(l10n.t('daily_goal'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(
+                goal > 0
+                    ? Money.format(goal)
+                    : l10n.t('daily_goal_off'),
+                style: const TextStyle(fontSize: 12)),
+            trailing: Icon(Icons.adaptive.arrow_forward, size: 18),
+            onTap: () async {
+              final controller = TextEditingController(
+                  text: goal > 0 ? Money.plain(goal) : '');
+              final value = await showDialog<double>(
+                context: context,
+                builder: (dialog) => AlertDialog(
+                  title: Text(l10n.t('daily_goal')),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l10n.t('daily_goal_hint'),
+                          style:
+                              Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: InputDecoration(
+                          hintText: '0',
+                          prefixText: '${Money.symbol} ',
+                          border: const OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => Navigator.pop(
+                            dialog, parseAmount(controller.text)),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialog),
+                        child: Text(l10n.cancel)),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(dialog, parseAmount(controller.text)),
+                      child: Text(l10n.save),
+                    ),
+                  ],
+                ),
+              );
+              if (value == null) return;
+              await DailyGoal.set(value);
+              if (mounted) setState(() {});
+            },
+          ),
+          const Divider(height: 20),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.admin_panel_settings_outlined),
+            title: Text(l10n.t('discount_limit'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+            subtitle: Text(
+                l10n.t('discount_limit_hint',
+                    {'percent': discountLimit.toStringAsFixed(0)}),
+                style: const TextStyle(fontSize: 12)),
+            trailing: Icon(Icons.adaptive.arrow_forward, size: 18),
+            onTap: () async {
+              final controller = TextEditingController(
+                  text: discountLimit.toStringAsFixed(0));
+              final value = await showDialog<double>(
+                context: context,
+                builder: (dialog) => AlertDialog(
+                  title: Text(l10n.t('discount_limit')),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(l10n.t('discount_limit_body'),
+                          style:
+                              Theme.of(context).textTheme.bodySmall),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: controller,
+                        autofocus: true,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                          hintText: '10',
+                          suffixText: '%',
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => Navigator.pop(
+                            dialog, parseAmount(controller.text)),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialog),
+                        child: Text(l10n.cancel)),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(dialog, parseAmount(controller.text)),
+                      child: Text(l10n.save),
+                    ),
+                  ],
+                ),
+              );
+              if (value == null) return;
+              await ManagerApproval.setDiscountLimitPercent(
+                  value.clamp(0, 100));
+              if (mounted) setState(() {});
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSecurity(AppSettings settings) {
     final l10n = context.l10n;
     final multi = sessionController.isMultiUser;
@@ -883,8 +793,8 @@ class _SettingsPageState extends State<SettingsPage> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.groups_outlined,
-                      size: 18, color: AppTheme.primaryColor),
+                  Icon(Icons.groups_outlined,
+                      size: 18, color: Theme.of(context).colorScheme.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(l10n.t('multi_user_active'),
@@ -920,7 +830,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: OutlinedButton.icon(
                       onPressed: _removePin,
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red),
+                          foregroundColor: AppTheme.danger),
                       icon: const Icon(Icons.lock_open, size: 18),
                       label: Text(l10n.t('remove_pin')),
                     ),
@@ -958,15 +868,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildPrinter() {
     final l10n = context.l10n;
-    final box = HiveDatabase.settingsBox;
+    final box = CloudDatabase.settingsBox;
     return BlocConsumer<PrinterBloc, PrinterState>(
       listener: (context, state) {
         if (state.errorMessage != null &&
             (state.status == PrinterStatus.scanFailure ||
                 state.status == PrinterStatus.connectionFailure)) {
-          _snack(l10n.t(state.errorMessage!), color: Colors.red);
+          _snack(l10n.t(state.errorMessage!), color: AppTheme.danger);
         } else if (state.status == PrinterStatus.connected) {
-          _snack(l10n.t('connected_to_printer'), color: Colors.green);
+          _snack(l10n.t('connected_to_printer'), color: AppTheme.success);
         }
       },
       builder: (context, state) {
@@ -1067,7 +977,7 @@ class _SettingsPageState extends State<SettingsPage> {
                               .read<PrinterBloc>()
                               .add(DisconnectPrinterEvent()),
                       style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.red),
+                          foregroundColor: AppTheme.danger),
                       icon: const Icon(Icons.link_off, size: 18),
                       label: Text(l10n.t('disconnect')),
                     ),
@@ -1195,145 +1105,80 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildSync() {
+  // ---------------------------------------------------------- appearance
+
+  /// Theme mode + accent colour + density. Everything here is instant:
+  /// [themeController] rebuilds MaterialApp on every change.
+  Widget _buildAppearance() {
     final l10n = context.l10n;
-    final token = SyncHelper.getOrCreateToken();
-    final scansEnabled = SyncHelper.isEnabled();
-    final fullSync = SyncHelper.isFullSyncEnabled();
-    final autoSync = SyncHelper.isAutoSyncEnabled();
-    final pending = SyncHelper.pendingCount;
-    final last = SyncHelper.lastSyncAt();
-    final lastText = last == null
-        ? l10n.t('never')
-        : DateFormat('dd/MM/yyyy HH:mm').format(last);
-    return _card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _label(l10n.t('your_token')),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(token,
-                      textDirection: TextDirection.ltr,
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 12)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 20),
-                tooltip: l10n.t('copy_token'),
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: token));
-                  _snack(l10n.t('token_copied'), color: Colors.green);
+    return ValueListenableBuilder<ThemeSettings>(
+      valueListenable: themeController,
+      builder: (context, theme, _) => _card(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _label(l10n.t('theme_mode')),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ThemeMode>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                      value: ThemeMode.light,
+                      label: Text(l10n.t('light')),
+                      icon: const Icon(Icons.light_mode_outlined, size: 18)),
+                  ButtonSegment(
+                      value: ThemeMode.dark,
+                      label: Text(l10n.t('dark')),
+                      icon: const Icon(Icons.dark_mode_outlined, size: 18)),
+                  ButtonSegment(
+                      value: ThemeMode.system,
+                      label: Text(l10n.t('auto')),
+                      icon: const Icon(Icons.brightness_auto_outlined,
+                          size: 18)),
+                ],
+                selected: {theme.mode},
+                onSelectionChanged: (s) {
+                  themeController.setThemeMode(s.first);
+                  patchShopSettings({'themeMode': s.first.name});
                 },
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(l10n.t('token_hint'),
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).textTheme.bodySmall?.color)),
-          const SizedBox(height: 16),
-          _label(l10n.t('website_url')),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _syncUrlController,
-            keyboardType: TextInputType.url,
-            textDirection: TextDirection.ltr,
-            decoration: InputDecoration(
-              hintText: 'https://your-website.com',
-              isDense: true,
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onChanged: (value) => SyncHelper.setUrl(value.trim()),
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.t('send_scans'),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            subtitle: Text(l10n.t('send_scans_hint'),
-                style: const TextStyle(fontSize: 11)),
-            value: scansEnabled,
-            onChanged: (v) async {
-              await SyncHelper.setEnabled(v);
-              if (mounted) setState(() {});
-            },
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(l10n.t('full_sync'),
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-            subtitle: Text(l10n.t('full_sync_hint'),
-                style: const TextStyle(fontSize: 11)),
-            value: fullSync,
-            onChanged: (v) async {
-              await SyncHelper.setFullSyncEnabled(v);
-              if (v && pending == 0) await SyncHelper.enqueueEverything();
-              if (mounted) setState(() {});
-            },
-          ),
-          if (fullSync) ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(l10n.t('auto_sync'),
-                  style: const TextStyle(fontSize: 13)),
-              subtitle: Text(l10n.t('auto_sync_hint'),
-                  style: const TextStyle(fontSize: 11)),
-              value: autoSync,
-              onChanged: (v) async {
-                await SyncHelper.setAutoSyncEnabled(v);
-                if (mounted) setState(() {});
-              },
-            ),
-            const SizedBox(height: 4),
-            Row(
+            const SizedBox(height: 20),
+            _label(l10n.t('accent_color')),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                Expanded(
-                  child: Text(
-                    '${l10n.t('last_sync', {'time': lastText})}\n${l10n.t('sync_pending', {'count': pending})}',
-                    style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).textTheme.bodySmall?.color),
+                for (final accent in AppTheme.accents)
+                  _AccentSwatch(
+                    accent: accent,
+                    selected: accent.id == theme.accentId,
+                    label: l10n.t(accent.labelKey),
+                    onTap: () {
+                      themeController.setAccent(accent.id);
+                      patchShopSettings({'accentColor': accent.id});
+                    },
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: _syncing ? null : _syncNow,
-                  icon: _syncing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.sync, size: 18),
-                  label: Text(l10n.t('sync_now')),
-                ),
               ],
             ),
-            const SizedBox(height: 4),
-            TextButton.icon(
-              onPressed: _resendAll,
-              icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-              label: Text(l10n.t('resend_all')),
+            const SizedBox(height: 6),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.t('compact_mode'),
+                  style: const TextStyle(fontSize: 13)),
+              subtitle: Text(l10n.t('compact_mode_hint'),
+                  style: const TextStyle(fontSize: 11)),
+              value: theme.compact,
+              onChanged: (v) {
+                themeController.setCompact(v);
+                patchShopSettings({'compactMode': v});
+              },
             ),
-            Text(l10n.t('resend_all_hint'),
-                style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).textTheme.bodySmall?.color)),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1392,7 +1237,7 @@ class _SettingsPageState extends State<SettingsPage> {
     bool showChevron = true,
   }) =>
       ListTile(
-        leading: Icon(icon, color: AppTheme.primaryColor),
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
         title: Text(title,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: subtitle == null
@@ -1429,9 +1274,75 @@ class _LanguagePicker extends StatelessWidget {
             label: Text(o.value),
             selected: current?.languageCode == o.key,
             onSelected: (_) =>
-                appSettings.setLocale(o.key == null ? null : Locale(o.key!)),
+                (loc) {
+                  appSettings.setLocale(loc);
+                  patchShopSettings({'locale': loc?.languageCode ?? ''});
+                }(o.key == null ? null : Locale(o.key!)),
           ),
       ],
+    );
+  }
+}
+
+/// A round colour chip used by the accent picker.
+class _AccentSwatch extends StatelessWidget {
+  final AccentPalette accent;
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+
+  const _AccentSwatch({
+    required this.accent,
+    required this.selected,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              gradient: accent.gradient,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: selected
+                    ? Theme.of(context).colorScheme.onSurface
+                    : Colors.transparent,
+                width: 2.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.seed.withValues(alpha: selected ? 0.45 : 0.2),
+                  blurRadius: selected ? 14 : 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: selected
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+                : null,
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 56,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

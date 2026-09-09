@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/cloud/cloud_auth_controller.dart';
 import '../../core/security/session_controller.dart';
+import '../../features/auth/presentation/pages/auth_gate_page.dart';
 import '../../features/billing/presentation/pages/home_page.dart';
 import '../../features/product/presentation/pages/product_list_page.dart';
 import '../../features/product/presentation/pages/add_product_page.dart';
@@ -17,45 +20,91 @@ import '../../features/customers/presentation/pages/customers_page.dart';
 import '../../features/customers/presentation/pages/customer_form_page.dart';
 import '../../features/customers/presentation/pages/customer_detail_page.dart';
 import '../../features/menu/presentation/pages/menu_page.dart';
+import '../../features/customers/presentation/pages/debts_page.dart';
+import '../../features/inventory/presentation/pages/stock_take_page.dart';
+import '../../features/search/presentation/pages/search_page.dart';
+import '../../features/shifts/presentation/pages/shift_page.dart';
+import '../../features/users/presentation/pages/login_page.dart';
 import '../../features/sales/presentation/pages/invoice_page.dart';
 import '../../features/expenses/presentation/pages/expenses_page.dart';
 import '../../features/inventory/presentation/pages/purchases_page.dart';
 import '../../features/inventory/presentation/pages/new_purchase_page.dart';
 import '../../features/inventory/presentation/pages/stock_movements_page.dart';
+import '../../features/inventory/presentation/pages/expiry_page.dart';
 import '../../features/labels/presentation/pages/labels_page.dart';
+import '../../features/product/presentation/pages/dead_stock_page.dart';
+import '../../features/billing/domain/entities/promotion.dart';
+import '../../features/promotions/presentation/pages/promotions_page.dart';
+import '../../features/promotions/presentation/pages/promotion_form_page.dart';
+import '../../features/sales/domain/entities/sale.dart';
+import '../../features/sales/presentation/pages/return_page.dart';
 import '../../features/users/presentation/pages/users_page.dart';
 import '../../features/users/presentation/pages/lock_page.dart';
+import '../../features/delivery/presentation/pages/deliveries_page.dart';
+import '../../features/delivery/presentation/pages/delivery_tracking_page.dart';
+import '../../features/delivery/presentation/pages/courier_home_page.dart';
+import '../../features/delivery/presentation/pages/courier_delivery_page.dart';
+import '../../features/delivery/presentation/pages/courier_earnings_page.dart';
+import '../../features/delivery/presentation/pages/courier_history_page.dart';
+import '../../features/delivery/presentation/pages/deliverers_page.dart';
 
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
-const _adminOnlyPrefixes = [
-  '/products/add',
-  '/products/edit',
-  '/products/low-stock',
-  '/reports',
-  '/settings',
-  '/shop',
-  '/expenses',
-  '/inventory',
-  '/labels',
-  '/users',
-];
+
+// The global `cloudAuth` session lives in cloud_auth_controller.dart and is
+// assigned once in main().
 
 final router = GoRouter(
-  initialLocation: '/menu',
-  refreshListenable: sessionController,
+  initialLocation: '/splash',
+  refreshListenable: Listenable.merge([cloudAuth, sessionController]),
   redirect: (context, state) {
     final location = state.uri.path;
-    final locked = sessionController.needsUnlock;
-    if (locked) return location == '/lock' ? null : '/lock';
-    if (location == '/lock') return '/menu';
-    if (!sessionController.isAdmin &&
-        _adminOnlyPrefixes.any((p) => location.startsWith(p))) {
-      return '/menu';
+    const authRoutes = ['/login', '/lock'];
+    const cloudRoutes = ['/splash', '/cloud-login', '/pending'];
+
+    // ---- Cloud auth gate (runs first, login is mandatory) ----
+    switch (cloudAuth.state) {
+      case CloudAuthState.unknown:
+      case CloudAuthState.configMissing:
+        return location == '/splash' ? null : '/splash';
+      case CloudAuthState.signedOut:
+        return location == '/cloud-login' ? null : '/cloud-login';
+      case CloudAuthState.pendingApproval:
+        return location == '/pending' ? null : '/pending';
+      case CloudAuthState.ready:
+        break;
     }
+    if (cloudRoutes.contains(location)) return '/menu';
+
+    // ---- Legacy in-app locks (PIN / quick account switch) ----
+    if (sessionController.needsUnlock) {
+      if (authRoutes.contains(location)) return null;
+      return sessionController.isMultiUser ? '/login' : '/lock';
+    }
+    if (authRoutes.contains(location)) return '/menu';
+
+    // The courier experience: a deliverer only sees his own screens.
+    if (sessionController.isDeliverer && !location.startsWith('/courier')) {
+      return '/courier';
+    }
+
+    // Signed in: every screen checks the role's permissions.
+    if (!sessionController.canOpen(location)) return '/menu';
     return null;
   },
   routes: [
+    GoRoute(
+      path: '/splash',
+      builder: (context, state) => SplashPage(controller: cloudAuth),
+    ),
+    GoRoute(
+      path: '/cloud-login',
+      builder: (context, state) => CloudLoginPage(controller: cloudAuth),
+    ),
+    GoRoute(
+      path: '/pending',
+      builder: (context, state) => PendingApprovalPage(controller: cloudAuth),
+    ),
     GoRoute(
       path: '/lock',
       builder: (context, state) => const LockPage(),
@@ -91,6 +140,72 @@ final router = GoRouter(
       ],
     ),
     GoRoute(
+      path: '/deliveries',
+      builder: (context, state) => const DeliveriesPage(),
+      routes: [
+        GoRoute(
+          path: 'map',
+          builder: (context, state) => const DeliveryTrackingPage(),
+        ),
+        GoRoute(
+          path: 'couriers',
+          builder: (context, state) => const DeliverersPage(),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/courier',
+      builder: (context, state) => const CourierHomePage(),
+      routes: [
+        GoRoute(
+          path: 'map',
+          builder: (context, state) => const DeliveryTrackingPage(),
+        ),
+        GoRoute(
+          path: 'earnings',
+          builder: (context, state) => const CourierEarningsPage(),
+        ),
+        GoRoute(
+          path: 'history',
+          builder: (context, state) => const CourierHistoryPage(),
+        ),
+        GoRoute(
+          path: 'detail',
+          builder: (context, state) => CourierDeliveryPage(
+            deliveryId: state.extra as String? ?? '',
+            readOnly: !sessionController.isDeliverer,
+          ),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginPage(),
+    ),
+    GoRoute(
+      path: '/shift',
+      builder: (context, state) => const ShiftPage(),
+    ),
+    GoRoute(
+      path: '/search',
+      builder: (context, state) => const SearchPage(),
+    ),
+    GoRoute(
+      path: '/promotions',
+      builder: (context, state) => const PromotionsPage(),
+      routes: [
+        GoRoute(
+          path: 'form',
+          builder: (context, state) =>
+              PromotionFormPage(existing: state.extra as Promotion?),
+        ),
+      ],
+    ),
+    GoRoute(
+      path: '/returns/new',
+      builder: (context, state) => ReturnPage(sale: state.extra as Sale),
+    ),
+    GoRoute(
       path: '/settings',
       builder: (context, state) => const SettingsPage(),
     ),
@@ -118,6 +233,10 @@ final router = GoRouter(
         GoRoute(
           path: 'low-stock',
           builder: (context, state) => const LowStockPage(),
+        ),
+        GoRoute(
+          path: 'dead-stock',
+          builder: (context, state) => const DeadStockPage(),
         ),
         GoRoute(
           path: 'movements/:id',
@@ -163,6 +282,14 @@ final router = GoRouter(
             return NewPurchasePage(initialProduct: product);
           },
         ),
+        GoRoute(
+          path: 'stocktake',
+          builder: (context, state) => const StockTakePage(),
+        ),
+        GoRoute(
+          path: 'expiry',
+          builder: (context, state) => const ExpiryPage(),
+        ),
       ],
     ),
     GoRoute(
@@ -174,12 +301,16 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/users',
-      builder: (context, state) => const UsersPage(),
+      builder: (context, state) => UsersPage(controller: cloudAuth),
     ),
     GoRoute(
       path: '/customers',
       builder: (context, state) => const CustomersPage(),
       routes: [
+        GoRoute(
+          path: 'debts',
+          builder: (context, state) => const DebtsPage(),
+        ),
         GoRoute(
           path: 'picker',
           builder: (context, state) => const CustomersPage(selectionMode: true),

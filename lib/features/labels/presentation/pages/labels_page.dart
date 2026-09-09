@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/pdf/pdf_helper.dart';
 import '../../../../core/utils/money.dart';
@@ -10,6 +10,8 @@ import '../../../../core/utils/printer_helper.dart';
 import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../core/utils/search_text.dart';
 
 /// Barcode label sheets. Select products, choose layout, export an A4 PDF
 /// (print it anywhere / share it) or push single stickers to the thermal
@@ -45,9 +47,7 @@ class _LabelsPageState extends State<LabelsPage> {
     final list = all.where((p) {
       if (_onlyWithBarcode && p.barcode.trim().isEmpty) return false;
       if (q.isEmpty) return true;
-      return p.name.toLowerCase().contains(q) ||
-          p.barcode.contains(q) ||
-          p.category.toLowerCase().contains(q);
+      return SearchText.matchesAny([p.name, p.barcode, p.category], q);
     }).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return list;
@@ -85,7 +85,7 @@ class _LabelsPageState extends State<LabelsPage> {
       await PdfHelper.shareBytes(bytes, 'labels.pdf',
           subject: l10n.t('barcode_labels'));
     } catch (e) {
-      _snack(l10n.t('pdf_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('pdf_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -102,13 +102,13 @@ class _LabelsPageState extends State<LabelsPage> {
     final printer = PrinterHelper();
     try {
       if (!printer.isConnected) {
-        final mac = HiveDatabase.settingsBox.get('printer_mac') as String?;
+        final mac = CloudDatabase.settingsBox.get('printer_mac') as String?;
         if (mac == null || mac.isEmpty) {
-          _snack(l10n.t('no_printer'), color: Colors.red);
+          _snack(l10n.t('no_printer'), color: AppTheme.danger);
           return;
         }
         if (!await printer.connect(mac)) {
-          _snack(l10n.t('printer_connect_failed'), color: Colors.red);
+          _snack(l10n.t('printer_connect_failed'), color: AppTheme.danger);
           return;
         }
       }
@@ -120,9 +120,9 @@ class _LabelsPageState extends State<LabelsPage> {
           copies: _copies,
         );
       }
-      _snack(l10n.t('printed_successfully'), color: Colors.green);
+      _snack(l10n.t('printed_successfully'), color: AppTheme.success);
     } catch (e) {
-      _snack(l10n.t('print_failed', {'error': e}), color: Colors.red);
+      _snack(l10n.t('print_failed', {'error': e}), color: AppTheme.danger);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

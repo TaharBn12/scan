@@ -12,6 +12,7 @@ import '../../../product/domain/entities/product.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../domain/entities/stock_movement.dart';
 import '../bloc/inventory_bloc.dart';
+import '../../../../core/theme/app_theme.dart';
 
 /// Audit trail of one product's stock (sales out, purchases in, manual
 /// adjustments, refunds) plus a "set the real count" adjustment action.
@@ -242,7 +243,7 @@ class StockMovementsPage extends StatelessWidget {
                         itemBuilder: (context, i) {
                           final m = movements[i];
                           final positive = m.delta >= 0;
-                          final color = positive ? Colors.green : Colors.red;
+                          final color = positive ? AppTheme.success : AppTheme.danger;
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(

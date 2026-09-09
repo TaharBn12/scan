@@ -45,6 +45,8 @@ class _ProductFormState extends State<ProductForm> {
   late final TextEditingController _categoryCtrl;
   late final TextEditingController _stockCtrl;
   late final TextEditingController _thresholdCtrl;
+  late final TextEditingController _wholesalePriceCtrl;
+  late final TextEditingController _wholesaleMinQtyCtrl;
 
   late bool _hasBarcode;
   late bool _trackStock;
@@ -70,6 +72,12 @@ class _ProductFormState extends State<ProductForm> {
     _stockCtrl = TextEditingController(text: p == null ? '0' : formatQty(p.stock));
     _thresholdCtrl =
         TextEditingController(text: (p?.lowStockThreshold ?? 5).toString());
+    _wholesalePriceCtrl = TextEditingController(
+        text: p == null || p.wholesalePrice <= 0 ? '' : _num(p.wholesalePrice));
+    _wholesaleMinQtyCtrl = TextEditingController(
+        text: p == null || p.wholesaleMinQty <= 0
+            ? ''
+            : formatQty(p.wholesaleMinQty));
     if (widget.initialBarcode != null && widget.initialBarcode!.isNotEmpty) {
       _hasBarcode = true;
     }
@@ -87,6 +95,8 @@ class _ProductFormState extends State<ProductForm> {
     _categoryCtrl.dispose();
     _stockCtrl.dispose();
     _thresholdCtrl.dispose();
+    _wholesalePriceCtrl.dispose();
+    _wholesaleMinQtyCtrl.dispose();
     super.dispose();
   }
 
@@ -127,7 +137,7 @@ class _ProductFormState extends State<ProductForm> {
       if (clash.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(l10n.t('product_exists', {'barcode': barcode})),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.danger,
         ));
         return;
       }
@@ -146,6 +156,8 @@ class _ProductFormState extends State<ProductForm> {
       unit: _unit,
       trackStock: _trackStock,
       updatedAt: DateTime.now(),
+      wholesalePrice: parseAmount(_wholesalePriceCtrl.text),
+      wholesaleMinQty: parseAmount(_wholesaleMinQtyCtrl.text),
     );
     widget.onSubmit(product);
   }
@@ -227,8 +239,8 @@ class _ProductFormState extends State<ProductForm> {
                     if (!_isEdit) ...[
                       const SizedBox(height: 6),
                       Text(l10n.t('scan_type_generate'),
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF4C669A))),
+                          style: TextStyle(
+                              fontSize: 12, color: context.mutedColor)),
                     ],
                     const SizedBox(height: 24),
                   ] else if (_isEdit) ...[
@@ -311,8 +323,42 @@ class _ProductFormState extends State<ProductForm> {
                   ),
                   const SizedBox(height: 4),
                   Text(l10n.t('used_for_profit'),
-                      style: const TextStyle(
-                          fontSize: 12, color: Color(0xFF4C669A))),
+                      style: TextStyle(
+                          fontSize: 12, color: context.mutedColor)),
+                  const SizedBox(height: 24),
+                  InputLabel(text: l10n.t('wholesale_price_optional')),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _wholesalePriceCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: InputDecoration(
+                            hintText: '0.00',
+                            prefixText: currencyPrefix,
+                            helperText: l10n.t('wholesale_price_hint'),
+                          ),
+                          validator: AppValidators.optionalAmount(l10n),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _wholesaleMinQtyCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true),
+                          decoration: InputDecoration(
+                            hintText: '10',
+                            suffixText: l10n.t(_unit.shortKey),
+                            helperText: l10n.t('wholesale_min_qty_hint'),
+                          ),
+                          validator: AppValidators.optionalAmount(l10n),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   InputLabel(text: l10n.t('category_optional')),
                   _categoryField(l10n),

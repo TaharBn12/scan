@@ -1,7 +1,6 @@
 import 'package:fpdart/fpdart.dart';
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/sale.dart';
 import '../../domain/repositories/sale_repository.dart';
 
@@ -11,9 +10,9 @@ class SaleRepositoryImpl implements SaleRepository {
   @override
   Future<Either<Failure, List<Sale>>> getSales() async {
     try {
-      final box = HiveDatabase.salesBox;
+      final box = CloudDatabase.salesBox;
       final sales = box.values
-          .map((raw) => Sale.fromMap(Map<String, dynamic>.from(raw as Map)))
+          .map((raw) => Sale.fromMap(raw))
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
       return Right(sales);
@@ -27,14 +26,13 @@ class SaleRepositoryImpl implements SaleRepository {
     try {
       Sale toStore = sale;
       // Assign a sequential invoice number on first save only.
-      if (sale.number <= 0 && !HiveDatabase.salesBox.containsKey(sale.id)) {
-        final next = (HiveDatabase.settingsBox.get(_counterKey) as int? ?? 0) + 1;
-        await HiveDatabase.settingsBox.put(_counterKey, next);
+      if (sale.number <= 0 && !CloudDatabase.salesBox.containsKey(sale.id)) {
+        final next = (CloudDatabase.settingsBox.get(_counterKey) as int? ?? 0) + 1;
+        await CloudDatabase.settingsBox.put(_counterKey, next);
         toStore = sale.copyWith(number: next);
       }
       toStore = toStore.copyWith(updatedAt: DateTime.now());
-      await HiveDatabase.salesBox.put(toStore.id, toStore.toMap());
-      await SyncQueue.enqueue('sale', toStore.id, SyncQueue.opUpsert);
+      await CloudDatabase.salesBox.put(toStore.id, toStore.toMap());
       return Right(toStore);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -44,8 +42,7 @@ class SaleRepositoryImpl implements SaleRepository {
   @override
   Future<Either<Failure, void>> deleteSale(String id) async {
     try {
-      await HiveDatabase.salesBox.delete(id);
-      await SyncQueue.enqueue('sale', id, SyncQueue.opDelete);
+      await CloudDatabase.salesBox.delete(id);
       return const Right(null);
     } catch (e) {
       return Left(CacheFailure(e.toString()));

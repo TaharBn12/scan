@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../data/hive_database.dart';
+import '../cloud/cloud_database.dart';
 import '../../features/product/domain/entities/product.dart';
 import '../../features/shop/domain/entities/shop.dart';
 
@@ -21,16 +21,16 @@ class BackupHelper {
 
   static String exportAsJson({bool pretty = true}) {
     final products =
-        HiveDatabase.productBox.values.map((p) => p.toMap()).toList();
+        CloudDatabase.productBox.values.map((p) => p.toMap()).toList();
 
     List<Map<String, dynamic>> dump(dynamic box) => (box.values as Iterable)
         .map((raw) => Map<String, dynamic>.from(raw as Map))
         .toList();
 
-    final shop = HiveDatabase.shopBox.get('shop_details')?.toMap();
+    final shop = CloudDatabase.shopBox.get('shop_details')?.toMap();
 
     // Settings worth carrying to a new phone (never the PIN hashes).
-    final settingsBox = HiveDatabase.settingsBox;
+    final settingsBox = CloudDatabase.settingsBox;
     const settingKeys = [
       'app_locale',
       'currency_symbol',
@@ -38,15 +38,16 @@ class BackupHelper {
       'currency_decimals',
       'decimal_quantities',
       'sale_counter',
-      'sync_url',
-      'sync_enabled',
-      'full_sync_enabled',
-      'auto_sync_enabled',
       'printer_mac',
       'printer_name',
       'paper_width',
       'auto_print',
       'theme_mode',
+      'theme_accent',
+      'compact_mode',
+      'quick_sale_favorites',
+      'daily_goal',
+      'discount_limit_percent',
     ];
     final settings = <String, dynamic>{
       for (final k in settingKeys)
@@ -58,12 +59,13 @@ class BackupHelper {
       'app': 'billing_app',
       'exportedAt': DateTime.now().toIso8601String(),
       'products': products,
-      'sales': dump(HiveDatabase.salesBox),
-      'customers': dump(HiveDatabase.customersBox),
-      'expenses': dump(HiveDatabase.expensesBox),
-      'purchases': dump(HiveDatabase.purchasesBox),
-      'stockMovements': dump(HiveDatabase.stockMovementsBox),
-      'users': dump(HiveDatabase.usersBox),
+      'sales': dump(CloudDatabase.salesBox),
+      'customers': dump(CloudDatabase.customersBox),
+      'expenses': dump(CloudDatabase.expensesBox),
+      'purchases': dump(CloudDatabase.purchasesBox),
+      'stockMovements': dump(CloudDatabase.stockMovementsBox),
+      'users': dump(CloudDatabase.usersBox),
+      'promotions': dump(CloudDatabase.promotionsBox),
       'shop': shop,
       'settings': settings,
     };
@@ -93,7 +95,7 @@ class BackupHelper {
     final dir = await backupDirectory();
     final file = File('${dir.path}/${_fileName()}');
     await file.writeAsString(exportAsJson(pretty: false), flush: true);
-    await HiveDatabase.settingsBox
+    await CloudDatabase.settingsBox
         .put(_lastBackupKey, DateTime.now().toIso8601String());
     await _pruneOldBackups(dir);
     return file;
@@ -132,15 +134,15 @@ class BackupHelper {
   }
 
   static DateTime? lastBackupAt() {
-    final raw = HiveDatabase.settingsBox.get(_lastBackupKey) as String?;
+    final raw = CloudDatabase.settingsBox.get(_lastBackupKey) as String?;
     return raw == null ? null : DateTime.tryParse(raw);
   }
 
   static bool isAutoBackupEnabled() =>
-      HiveDatabase.settingsBox.get(_autoBackupKey) as bool? ?? true;
+      CloudDatabase.settingsBox.get(_autoBackupKey) as bool? ?? true;
 
   static Future<void> setAutoBackupEnabled(bool value) async {
-    await HiveDatabase.settingsBox.put(_autoBackupKey, value);
+    await CloudDatabase.settingsBox.put(_autoBackupKey, value);
   }
 
   /// Called at app start: writes a backup at most once per day. Never
@@ -150,7 +152,7 @@ class BackupHelper {
       if (!isAutoBackupEnabled()) return;
       final last = lastBackupAt();
       if (last != null && DateTime.now().difference(last).inHours < 20) return;
-      if (HiveDatabase.salesBox.isEmpty && HiveDatabase.productBox.isEmpty) {
+      if (CloudDatabase.salesBox.isEmpty && CloudDatabase.productBox.isEmpty) {
         return;
       }
       await exportToFile();
@@ -184,7 +186,7 @@ class BackupHelper {
       final map = Map<String, dynamic>.from(raw as Map);
       if ((map['id'] as String?)?.isEmpty ?? true) continue;
       final product = Product.fromMap(map);
-      await HiveDatabase.productBox.put(product.id, product);
+      await CloudDatabase.productBox.put(product.id, product);
       productsImported++;
     }
 
@@ -201,18 +203,19 @@ class BackupHelper {
       return n;
     }
 
-    salesImported = await restore(decoded['sales'], HiveDatabase.salesBox);
+    salesImported = await restore(decoded['sales'], CloudDatabase.salesBox);
     customersImported =
-        await restore(decoded['customers'], HiveDatabase.customersBox);
+        await restore(decoded['customers'], CloudDatabase.customersBox);
     expensesImported =
-        await restore(decoded['expenses'], HiveDatabase.expensesBox);
-    await restore(decoded['purchases'], HiveDatabase.purchasesBox);
-    await restore(decoded['stockMovements'], HiveDatabase.stockMovementsBox);
-    await restore(decoded['users'], HiveDatabase.usersBox);
+        await restore(decoded['expenses'], CloudDatabase.expensesBox);
+    await restore(decoded['purchases'], CloudDatabase.purchasesBox);
+    await restore(decoded['stockMovements'], CloudDatabase.stockMovementsBox);
+    await restore(decoded['users'], CloudDatabase.usersBox);
+    await restore(decoded['promotions'], CloudDatabase.promotionsBox);
 
     final shop = decoded['shop'];
     if (shop is Map) {
-      await HiveDatabase.shopBox.put('shop_details', Shop.fromMap(shop));
+      await CloudDatabase.shopBox.put('shop_details', Shop.fromMap(shop));
       shopImported = true;
     }
 
@@ -220,18 +223,18 @@ class BackupHelper {
     if (settings is Map) {
       for (final entry in settings.entries) {
         if (entry.key is String && entry.value != null) {
-          await HiveDatabase.settingsBox.put(entry.key, entry.value);
+          await CloudDatabase.settingsBox.put(entry.key, entry.value);
         }
       }
     }
 
     // Keep invoice numbering monotonic after a restore.
-    int maxNumber = HiveDatabase.settingsBox.get('sale_counter') as int? ?? 0;
-    for (final raw in HiveDatabase.salesBox.values) {
-      final n = ((raw as Map)['number'] as num?)?.toInt() ?? 0;
+    int maxNumber = CloudDatabase.settingsBox.get('sale_counter') as int? ?? 0;
+    for (final raw in CloudDatabase.salesBox.values) {
+      final n = (raw['number'] as num?)?.toInt() ?? 0;
       if (n > maxNumber) maxNumber = n;
     }
-    await HiveDatabase.settingsBox.put('sale_counter', maxNumber);
+    await CloudDatabase.settingsBox.put('sale_counter', maxNumber);
 
     return BackupImportSummary(
       productsImported: productsImported,

@@ -1,9 +1,8 @@
 import 'package:fpdart/fpdart.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/data/hive_database.dart';
+import '../../../../core/cloud/cloud_database.dart';
 import '../../../../core/error/failure.dart';
-import '../../../../core/sync/sync_queue.dart';
 import '../../domain/entities/purchase.dart';
 import '../../domain/entities/stock_movement.dart';
 import '../../domain/repositories/inventory_repository.dart';
@@ -14,8 +13,8 @@ class InventoryRepositoryImpl implements InventoryRepository {
   @override
   Future<Either<Failure, List<Purchase>>> getPurchases() async {
     try {
-      final list = HiveDatabase.purchasesBox.values
-          .map((raw) => Purchase.fromMap(Map<String, dynamic>.from(raw as Map)))
+      final list = CloudDatabase.purchasesBox.values
+          .map((raw) => Purchase.fromMap(raw))
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
       return Right(list);
@@ -30,7 +29,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
     bool updateCostPrice = true,
   }) async {
     try {
-      final productBox = HiveDatabase.productBox;
+      final productBox = CloudDatabase.productBox;
       final now = DateTime.now();
 
       for (final line in purchase.items) {
@@ -46,7 +45,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
           updatedAt: now,
         );
         await productBox.put(updated.id, updated);
-        await SyncQueue.enqueue('product', updated.id, SyncQueue.opUpsert);
 
         await _putMovement(StockMovement(
           id: _uuid.v4(),
@@ -62,8 +60,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
         ));
       }
 
-      await HiveDatabase.purchasesBox.put(purchase.id, purchase.toMap());
-      await SyncQueue.enqueue('purchase', purchase.id, SyncQueue.opUpsert);
+      await CloudDatabase.purchasesBox.put(purchase.id, purchase.toMap());
       return Right(purchase);
     } catch (e) {
       return Left(CacheFailure(e.toString()));
@@ -74,9 +71,9 @@ class InventoryRepositoryImpl implements InventoryRepository {
   Future<Either<Failure, List<StockMovement>>> getMovements(
       {String? productId}) async {
     try {
-      final list = HiveDatabase.stockMovementsBox.values
+      final list = CloudDatabase.stockMovementsBox.values
           .map((raw) =>
-              StockMovement.fromMap(Map<String, dynamic>.from(raw as Map)))
+              StockMovement.fromMap(raw))
           .where((m) => productId == null || m.productId == productId)
           .toList()
         ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
@@ -94,7 +91,7 @@ class InventoryRepositoryImpl implements InventoryRepository {
     String? userName,
   }) async {
     try {
-      final productBox = HiveDatabase.productBox;
+      final productBox = CloudDatabase.productBox;
       final product = productBox.get(productId);
       if (product == null) return const Right(null);
       final clamped = newStock < 0 ? 0.0 : newStock;
@@ -102,7 +99,6 @@ class InventoryRepositoryImpl implements InventoryRepository {
       final updated = product.copyWith(
           stock: clamped, trackStock: true, updatedAt: DateTime.now());
       await productBox.put(updated.id, updated);
-      await SyncQueue.enqueue('product', updated.id, SyncQueue.opUpsert);
       await _putMovement(StockMovement(
         id: _uuid.v4(),
         productId: product.id,
@@ -134,15 +130,14 @@ class InventoryRepositoryImpl implements InventoryRepository {
   }
 
   Future<void> _putMovement(StockMovement m) async {
-    await HiveDatabase.stockMovementsBox.put(m.id, m.toMap());
-    await SyncQueue.enqueue('stock_movement', m.id, SyncQueue.opUpsert);
+    await CloudDatabase.stockMovementsBox.put(m.id, m.toMap());
     // Keep the audit trail bounded so the box never grows unbounded on a
     // busy shop: keep the most recent 5000 movements.
-    final box = HiveDatabase.stockMovementsBox;
+    final box = CloudDatabase.stockMovementsBox;
     if (box.length > 5000) {
       final all = box.toMap().entries.toList()
-        ..sort((a, b) => ((a.value as Map)['dateTime'] as String)
-            .compareTo((b.value as Map)['dateTime'] as String));
+        ..sort((a, b) => (a.value['dateTime'] as String)
+            .compareTo(b.value['dateTime'] as String));
       for (final e in all.take(box.length - 5000)) {
         await box.delete(e.key);
       }
