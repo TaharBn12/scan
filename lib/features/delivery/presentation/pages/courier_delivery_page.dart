@@ -278,7 +278,7 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
     if (delivererId == null || delivererId.isEmpty) return null;
     final m = CloudDatabase.usersBox.get(delivererId);
     if (m == null) return null;
-    final loc = (m as Map)['location'];
+    final loc = m['location'];
     if (loc is! Map) return null;
     final lat = (loc['lat'] as num?)?.toDouble();
     final lng = (loc['lng'] as num?)?.toDouble();
