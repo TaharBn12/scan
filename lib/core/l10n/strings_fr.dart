@@ -991,4 +991,6 @@ const Map<String, String> stringsFr = {
   'fees_today': 'Frais du jour',
   'delivered_today': 'Livrées aujourd’hui',
   'your_tasks_today': 'Vos tâches en ce moment',
+  'member_creation_no_shop': 'Boutique introuvable — reconnectez-vous puis réessayez.',
+  'member_repaired_toast': 'Le compte existait — inscription réparée, il peut se connecter',
 };

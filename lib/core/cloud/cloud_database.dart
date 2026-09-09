@@ -114,6 +114,67 @@ class CloudDatabase {
     await Future.wait(_all.map((b) => b.ready()));
   }
 
+  /// One-time self-healing sweep: builds earlier than the shopId fix wrote
+  /// every box to a stray top-level path (`shops/<box>` instead of
+  /// `shops/<shopId>/<box>`) because the member profile carried an empty
+  /// shopId. Anything missing under the real shop is copied across (never
+  /// overwriting fresher rows), broken member enrollments get their users
+  /// row repaired, and the stray nodes are removed. Idempotent — a flag
+  /// under meta prevents repeats.
+  static Future<void> migrateLegacyRootData(String shopId) async {
+    if (shopId.isEmpty) return;
+    try {
+      final flagRef = _db.ref('shops/$shopId/meta/legacy_swept_at');
+      final flag = await flagRef.get();
+      if (flag.exists) return;
+      for (final box in _all) {
+        final legacy = _db.ref('shops/${box.name}');
+        final snap = await legacy.get();
+        final v = snap.value;
+        if (v is! Map) continue;
+        final target = _db.ref('shops/$shopId/${box.name}');
+        final cur = await target.get();
+        final cv = cur.value is Map ? (cur.value as Map) : const {};
+        final updates = <String, dynamic>{};
+        for (final e in v.entries) {
+          if (!cv.containsKey(e.key)) {
+            updates['shops/$shopId/${box.name}/${e.key}'] = e.value;
+          }
+        }
+        if (updates.isNotEmpty) {
+          await _db.ref().update(updates);
+        }
+        // Repair workers created while the bug was live: their users row
+        // pointed at an empty shop, which is what trapped them on the
+        // "waiting for approval" screen.
+        if (box.name == 'members') {
+          for (final e in v.entries) {
+            final uid = e.key as String?;
+            final row = e.value;
+            if (uid == null || row is! Map) continue;
+            final userSnap = await userProfile(uid).get();
+            final uv = userSnap.value;
+            final needs = !userSnap.exists ||
+                uv is! Map ||
+                ((uv['shopId'] as String?) ?? '').isEmpty;
+            if (needs) {
+              await userProfile(uid).set({
+                'name': row['name'] ?? '',
+                'email': row['email'] ?? '',
+                'shopId': shopId,
+                'createdAt': ServerValue.timestamp,
+              });
+            }
+          }
+        }
+        await legacy.remove();
+      }
+      await flagRef.set(ServerValue.timestamp);
+    } catch (_) {
+      // Never block sign-in for housekeeping; a later sign-in retries.
+    }
+  }
+
   /// Drops every live mirror (sign-out / shop switch).
   static void detach() {
     _shopId = null;

@@ -111,6 +111,7 @@ class FirebaseLayer {
         'email': user.email,
         'role': 'admin',
         'active': true,
+        'shopId': shopId,
         'joinedAt': now,
       },
       'users/${user.uid}': {
@@ -166,6 +167,7 @@ class FirebaseLayer {
         'email': user.email,
         'role': 'cashier',
         'active': false, // admin must approve
+        'shopId': shopId,
         'joinedAt': now,
       },
       'users/${user.uid}': {
@@ -224,7 +226,11 @@ class FirebaseLayer {
     if (shopId.isEmpty) return null;
     final memberSnap = await CloudDatabase.shopMember(shopId, uid).get();
     if (!memberSnap.exists) return null;
-    return MemberProfile.fromMap(uid, memberSnap.value as Map);
+    // Older builds never wrote shopId inside the member doc — the users row
+    // above is authoritative, inject it so downstream code can rely on it.
+    final memberMap = Map<dynamic, dynamic>.from(memberSnap.value as Map);
+    memberMap.putIfAbsent('shopId', () => shopId);
+    return MemberProfile.fromMap(uid, memberMap);
   }
 
   static Stream<DatabaseEvent> watchMemberProfile(String shopId, String uid) =>
@@ -242,6 +248,7 @@ class FirebaseLayer {
       'name': name,
       'role': role.name,
       'active': active,
+      'shopId': shopId,
       'updatedAt': ServerValue.timestamp,
     });
   }
@@ -298,6 +305,7 @@ class FirebaseLayer {
         'email': email.trim(),
         'role': role.name,
         'active': true,
+        'shopId': shopId,
         'joinedAt': now,
       },
       'users/$uid': {
@@ -307,6 +315,25 @@ class FirebaseLayer {
         'createdAt': now,
       },
     });
+  }
+
+  /// Finds the uid of an account that already owns [email] in /users —
+  /// used by the admin "repair" flow when account creation says the
+  /// email is taken (e.g. an enrollment that landed half-broken).
+  static Future<String?> findUidByEmail(String email) async {
+    try {
+      final snap = await FirebaseDatabase.instance
+          .ref('users')
+          .orderByChild('email')
+          .equalTo(email.trim())
+          .limitToFirst(1)
+          .get();
+      final v = snap.value;
+      if (v is Map && v.isNotEmpty) return v.keys.first as String?;
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ------------------------------------------------------ deliverer state

@@ -972,4 +972,6 @@ const Map<String, String> stringsAr = {
   'fees_today': 'أجور اليوم',
   'delivered_today': 'وصلات اليوم',
   'your_tasks_today': 'مهامك الحالية',
+  'member_creation_no_shop': 'تعذّر تحديد متجرك — اخرج ثم ادخل من جديد وأعد المحاولة.',
+  'member_repaired_toast': 'الحساب كان موجوداً — صلّحنا تسجيله، خليه يتصل من جديد',
 };

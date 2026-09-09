@@ -988,4 +988,6 @@ const Map<String, String> stringsEn = {
   'fees_today': 'Fees today',
   'delivered_today': 'Delivered today',
   'your_tasks_today': 'Your tasks right now',
+  'member_creation_no_shop': 'Could not resolve your shop — sign out and back in, then retry.',
+  'member_repaired_toast': 'Account existed — enrollment repaired, they can sign in now',
 };

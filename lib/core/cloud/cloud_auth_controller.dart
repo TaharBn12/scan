@@ -143,6 +143,10 @@ class CloudAuthController extends ChangeNotifier {
       _applyCloudSettings(profile.shopId);
       _bridgeSession(profile);
       CloudMigrator.migrateLocalDataOnce();
+      if (profile.role == MemberRole.admin) {
+        // Admin = authority: sweep stray data left by the empty-shopId bug.
+        unawaited(CloudDatabase.migrateLegacyRootData(profile.shopId));
+      }
       _setState(CloudAuthState.ready);
     } catch (e) {
       _error = 'auth_error_network';

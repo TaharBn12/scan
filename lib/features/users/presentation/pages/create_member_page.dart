@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/cloud/firebase_layer.dart';
@@ -38,8 +39,14 @@ class _CreateMemberPageState extends State<CreateMemberPage> {
 
   Future<void> _create() async {
     if (_busy || !_formKey.currentState!.validate()) return;
-    setState(() => _busy = true);
     final l10n = context.l10n;
+    if (widget.shopId.isEmpty) {
+      // Without the shop id every write would land nowhere — refuse early.
+      showAppSnack(context, l10n.t('member_creation_no_shop'),
+          icon: Icons.error_outline_rounded, color: AppTheme.danger);
+      return;
+    }
+    setState(() => _busy = true);
     try {
       final uid = await FirebaseLayer.createAuthAccount(
         email: _emailCtrl.text,
@@ -69,10 +76,48 @@ class _CreateMemberPageState extends State<CreateMemberPage> {
       Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
+      // Email already registered? The auth account exists but its
+      // enrollment may be broken (that was this exact bug). Repair it:
+      // re-write the users row + member row, no new auth account needed.
+      if (e is FirebaseAuthException && e.code == 'email-already-in-use') {
+        final fixed = await _repairExisting(l10n);
+        if (fixed) return;
+      }
       setState(() => _busy = false);
       showAppSnack(context, l10n.t(AuthErrorKeys.from(e)),
           icon: Icons.error_outline_rounded, color: AppTheme.danger);
     }
+  }
+
+  /// Re-enrolls an account whose email already exists (e.g. created while
+  /// the empty-shopId bug trapped it on the approval screen). Returns true
+  /// when the repair landed and this page can close itself.
+  Future<bool> _repairExisting(AppLocalizations l10n) async {
+    final uid = await FirebaseLayer.findUidByEmail(_emailCtrl.text);
+    if (uid == null) return false;
+    try {
+      await FirebaseLayer.enrollMember(
+        shopId: widget.shopId,
+        uid: uid,
+        name: _nameCtrl.text,
+        email: _emailCtrl.text,
+        role: switch (_role) {
+          UserRole.admin => MemberRole.admin,
+          UserRole.accountant => MemberRole.accountant,
+          UserRole.stockkeeper => MemberRole.stockkeeper,
+          UserRole.deliverer => MemberRole.deliverer,
+          UserRole.cashier => MemberRole.cashier,
+        },
+      );
+    } catch (_) {
+      return false;
+    }
+    if (!mounted) return true;
+    showAppSnack(context,
+        '${l10n.t('member_repaired_toast')} — ${_emailCtrl.text.trim()}',
+        icon: Icons.build_circle_outlined, color: AppTheme.success);
+    Navigator.of(context).pop();
+    return true;
   }
 
   @override
