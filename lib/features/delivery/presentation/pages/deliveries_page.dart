@@ -8,10 +8,11 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../data/delivery_repository.dart';
+import '../../data/delivery_stats.dart';
 import '../../domain/entities/delivery.dart';
 
-/// The shop's delivery board: every order with its live status, one tap to
-/// assign a deliverer, cancel, or jump to the live map.
+/// The shop's delivery board: every order with its live status, KPIs on
+/// top, one tap to assign a deliverer, cancel, or jump to the live map.
 class DeliveriesPage extends StatefulWidget {
   const DeliveriesPage({super.key});
 
@@ -49,6 +50,11 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
         title: Text(l10n.t('delivery_orders')),
         actions: [
           IconButton(
+            tooltip: l10n.t('couriers'),
+            icon: const Icon(Icons.groups_2_rounded),
+            onPressed: () => context.push('/deliveries/couriers'),
+          ),
+          IconButton(
             tooltip: l10n.t('delivery_map_title'),
             icon: const Icon(Icons.map_outlined),
             onPressed: () => context.push('/deliveries/map'),
@@ -66,18 +72,45 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _kpi(
+                          context,
+                          Icons.motorcycle_rounded,
+                          l10n.t('delivery_tab_open'),
+                          '${open.length}',
+                          context.scheme.primary),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _kpi(
+                          context,
+                          Icons.check_circle_outline_rounded,
+                          l10n.t('delivered_today'),
+                          '${DeliveryStats.deliveredTodayCount()}',
+                          AppTheme.success),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _kpi(
+                          context,
+                          Icons.payments_rounded,
+                          l10n.t('fees_today'),
+                          Money.format(DeliveryStats.feesToday()),
+                          AppTheme.info),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: Row(
                   children: [
                     _tabChip(l10n.t('delivery_tab_open'), open.length, 0),
                     const SizedBox(width: 8),
                     _tabChip(l10n.t('delivery_tab_done'), done.length, 1),
-                    const Spacer(),
-                    IconButton(
-                      tooltip: l10n.t('delivery_map_title'),
-                      onPressed: () => context.push('/deliveries/map'),
-                      icon: const Icon(Icons.location_on_outlined),
-                    ),
                   ],
                 ),
               ),
@@ -98,6 +131,44 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _kpi(BuildContext context, IconData icon, String label,
+      String value, Color color) {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15)),
+                Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 10.5, color: context.mutedColor)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -132,6 +203,13 @@ class _DeliveriesPageState extends State<DeliveriesPage> {
                 color: color,
                 icon: _statusIcon(d.status),
               ),
+              if (DeliveryStats.isDelayed(d)) ...[
+                const SizedBox(width: 6),
+                AppBadge(
+                    text: l10n.t('delivery_delayed'),
+                    color: AppTheme.danger,
+                    icon: Icons.schedule_rounded),
+              ],
               const Spacer(),
               Text(_age(context, d.createdAt),
                   style: TextStyle(fontSize: 11, color: context.mutedColor)),

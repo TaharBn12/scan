@@ -10,12 +10,14 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../data/delivery_repository.dart';
+import '../../data/delivery_stats.dart';
 import '../../data/location_reporter.dart';
 import '../../domain/entities/delivery.dart';
+import '../widgets/delivery_style.dart';
 
-/// The deliverer's home: duty switch, the orders assigned to him (live),
-/// and his earnings. Everything reads/writes Realtime Database — status
-/// changes appear on the admin's board the same second.
+/// The courier's world-class home: gradient hero with greeting, floating
+/// duty switch, live stats, his assigned orders and entries to earnings &
+/// history. Everything is a live mirror of Realtime Database.
 class CourierHomePage extends StatefulWidget {
   const CourierHomePage({super.key});
 
@@ -26,12 +28,7 @@ class CourierHomePage extends StatefulWidget {
 class _CourierHomePageState extends State<CourierHomePage> {
   final _listenables = _CourierListenables();
   bool _switching = false;
-
-  @override
-  void dispose() {
-    _listenables.dispose();
-    super.dispose();
-  }
+  bool _dutySyncGuard = false;
 
   String get _uid => cloudAuth.profile?.uid ?? '';
   String get _shopId => cloudAuth.shopId ?? '';
@@ -44,11 +41,31 @@ class _CourierHomePageState extends State<CourierHomePage> {
   @override
   void initState() {
     super.initState();
-    // If the courier was on duty, keep reporting his position after a
-    // cold start of the app too.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_onDuty && _uid.isNotEmpty && _shopId.isNotEmpty) {
         LocationReporter.start(_shopId, _uid);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _listenables.dispose();
+    super.dispose();
+  }
+
+  /// If an admin flips the duty flag off remotely, the reporting loop on
+  /// this device must stop too (and vice-versa).
+  void _syncReporterWithDuty() {
+    if (_dutySyncGuard) return;
+    _dutySyncGuard = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _dutySyncGuard = false;
+      if (!mounted) return;
+      if (_onDuty && !LocationReporter.running && _uid.isNotEmpty) {
+        LocationReporter.start(_shopId, _uid);
+      } else if (!_onDuty && LocationReporter.running) {
+        LocationReporter.stop();
       }
     });
   }
@@ -79,68 +96,167 @@ class _CourierHomePageState extends State<CourierHomePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    _syncReporterWithDuty();
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.t('courier_home')),
-        actions: [
-          IconButton(
-            tooltip: l10n.t('delivery_map_title'),
-            icon: const Icon(Icons.map_outlined),
-            onPressed: () => context.push('/courier/map'),
-          ),
-        ],
-      ),
       body: ListenableBuilder(
         listenable: _listenables,
         builder: (context, _) {
           final mine = DeliveryRepository.forDeliverer(_uid);
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            children: [
-              _dutyCard(),
-              const SizedBox(height: 14),
-              _earningsCard(),
-              const SizedBox(height: 18),
-              SectionHeader(
-                  title: '${l10n.t('my_deliveries')} · ${mine.length}'),
-              if (mine.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 26),
-                  child: EmptyState(
-                    icon: Icons.delivery_dining_outlined,
-                    title: l10n.t('no_courier_tasks'),
-                    message: l10n.t('duty_hint'),
+          final todayFees = DeliveryStats.dailySeries(days: 1, delivererId: _uid)
+              .fold<double>(0, (s, e) => s + e.fees);
+          final balance = DeliveryRepository.balanceOf(_uid);
+          final name = (cloudAuth.profile?.name ?? '').trim();
+
+          return RefreshIndicator(
+            onRefresh: () async {
+              await Future<void>.delayed(const Duration(milliseconds: 400));
+            },
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                // ── hero: greeting + duty switch floating card ──────────
+                SliverToBoxAdapter(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      DeliveryHeroHeader(
+                        title: name.isEmpty
+                            ? l10n.t('courier_home')
+                            : l10n.t('hello_name', {'name': name}),
+                        subtitle: l10n.t('duty_hint'),
+                        icon: Icons.delivery_dining_rounded,
+                        trailing: IconButton(
+                          tooltip: l10n.t('history_title'),
+                          onPressed: () => context.push('/courier/map'),
+                          icon: const Icon(Icons.map_outlined,
+                              color: Colors.white),
+                        ),
+                      ),
+                      Positioned.directional(
+                        textDirection: Directionality.of(context),
+                        start: 16,
+                        end: 16,
+                        bottom: 2,
+                        child: _dutySwitchCard(),
+                      ),
+                    ],
                   ),
-                )
-              else
-                for (final d in mine) _taskCard(d),
-              const SizedBox(height: 18),
-              _payoutsCard(),
-            ],
+                ),
+
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      // ── live stats ────────────────────────────────────
+                      Row(
+                        children: [
+                          Expanded(
+                            child: StatTile(
+                              icon: Icons.motorcycle_rounded,
+                              label: l10n.t('tasks_open'),
+                              value: '${mine.length}',
+                              color: context.scheme.primary,
+                              onTap: mine.isEmpty
+                                  ? null
+                                  : () => context.push('/courier/map'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: StatTile(
+                              icon: Icons.payments_rounded,
+                              label: l10n.t('fees_today'),
+                              value: Money.format(todayFees),
+                              color: DeliveryPalette.teal,
+                              onTap: () => context.push('/courier/earnings'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: StatTile(
+                              icon: Icons.account_balance_wallet_outlined,
+                              label: l10n.t('earnings_balance'),
+                              value: Money.format(balance),
+                              color: AppTheme.success,
+                              onTap: () => context.push('/courier/earnings'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _entryCard(
+                              icon: Icons.bar_chart_rounded,
+                              label: l10n.t('courier_earnings'),
+                              color: DeliveryPalette.teal,
+                              onTap: () =>
+                                  context.push('/courier/earnings'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _entryCard(
+                              icon: Icons.history_rounded,
+                              label: l10n.t('history_title'),
+                              color: const Color(0xFF64748B),
+                              onTap: () =>
+                                  context.push('/courier/history'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+
+                      // ── tasks ─────────────────────────────────────────
+                      SectionHeader(
+                          title:
+                              '${l10n.t('your_tasks_today')} · ${mine.length}'),
+                      if (mine.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 24),
+                          child: EmptyState(
+                            icon: Icons.delivery_dining_outlined,
+                            title: l10n.t('no_courier_tasks'),
+                            message: _onDuty
+                                ? l10n.t('menu_deliveries_subtitle')
+                                : l10n.t('duty_hint'),
+                          ),
+                        )
+                      else
+                        for (final d in mine) _taskCard(d),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),
     );
   }
 
-  // --------------------------------------------------------------- cards
+  // ---------------------------------------------------------------- cards
 
-  Widget _dutyCard() {
+  Widget _dutySwitchCard() {
     final l10n = context.l10n;
     final on = _onDuty;
     return AppCard(
-      color: on
-          ? AppTheme.success.withValues(alpha: 0.12)
-          : context.scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      color: context.scheme.surface,
       child: Row(
         children: [
-          Container(
-            width: 46,
-            height: 46,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: (on ? AppTheme.success : context.mutedColor)
-                  .withValues(alpha: 0.18),
+                  .withValues(alpha: 0.15),
             ),
             child: Icon(
               on ? Icons.online_prediction_rounded : Icons.bedtime_outlined,
@@ -154,83 +270,44 @@ class _CourierHomePageState extends State<CourierHomePage> {
               children: [
                 Text(on ? l10n.t('on_duty') : l10n.t('off_duty'),
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w800)),
-                Text(l10n.t('duty_hint'),
-                    style: TextStyle(fontSize: 11.5, color: context.mutedColor),
-                    maxLines: 2),
+                        fontSize: 15.5, fontWeight: FontWeight.w800)),
+                Text(
+                    on
+                        ? l10n.t('member_duty_on')
+                        : l10n.t('duty_error_location'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: context.mutedColor)),
               ],
             ),
           ),
           Switch(
             value: on,
             onChanged: _switching ? null : _toggleDuty,
+            activeThumbColor: AppTheme.success,
           ),
         ],
       ),
     );
   }
 
-  Widget _earningsCard() {
-    final l10n = context.l10n;
-    final now = DateTime.now();
-    final dayStart = DateTime(now.year, now.month, now.day);
-    final weekStart = dayStart.subtract(Duration(days: now.weekday - 1));
-    final today = DeliveryRepository.earnedBetween(_uid, dayStart,
-        dayStart.add(const Duration(days: 1)));
-    final week = DeliveryRepository.earnedBetween(
-        _uid, weekStart, dayStart.add(const Duration(days: 1)));
-    final balance = DeliveryRepository.balanceOf(_uid);
-    final count = DeliveryRepository.deliveredCountOf(_uid);
-
+  Widget _entryCard(
+      {required IconData icon,
+      required String label,
+      required Color color,
+      required VoidCallback onTap}) {
     return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.payments_outlined, color: context.scheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(l10n.t('courier_earnings'),
-                    style: const TextStyle(fontWeight: FontWeight.w800)),
-              ),
-              AppBadge(
-                text: '${l10n.t('delivery_status_delivered')}: $count',
-                color: AppTheme.info,
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _earningTile(l10n.t('earnings_today'), today),
-              _earningTile(l10n.t('earnings_week'), week),
-              _earningTile(l10n.t('earnings_balance'), balance,
-                  highlight: true),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _earningTile(String label, double value, {bool highlight = false}) {
-    return Expanded(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(vertical: 14),
       child: Column(
         children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 6),
           Text(label,
-              style: TextStyle(fontSize: 11, color: context.mutedColor),
-              textAlign: TextAlign.center),
-          const SizedBox(height: 4),
-          Text(
-            Money.format(value),
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              color: highlight ? AppTheme.success : null,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -238,53 +315,61 @@ class _CourierHomePageState extends State<CourierHomePage> {
 
   Widget _taskCard(Delivery d) {
     final l10n = context.l10n;
-    final color = d.status == DeliveryStatus.pickedUp
-        ? AppTheme.info
-        : context.scheme.primary;
+    final delayed = DeliveryStats.isDelayed(d);
+    final color = DeliveryPalette.statusStyle(d.status, context.scheme);
     return AppCard(
       margin: const EdgeInsets.only(bottom: 10),
+      borderColor: delayed
+          ? AppTheme.danger.withValues(alpha: 0.5)
+          : null,
       onTap: () => context.push('/courier/detail', extra: d.id),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text('#${d.number}',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800, color: context.mutedColor)),
-              const SizedBox(width: 8),
-              AppBadge(
-                text: l10n.t(d.status.labelKey),
-                color: color,
-                icon: d.status == DeliveryStatus.pickedUp
-                    ? Icons.delivery_dining_rounded
-                    : Icons.assignment_ind_outlined,
-              ),
-              const Spacer(),
-              if (d.paymentOnDelivery)
-                AppBadge(
-                  text:
-                      '${l10n.t('courier_cod_collect')} ${Money.format(d.saleTotal)}',
-                  color: AppTheme.warning,
-                  icon: Icons.payments_outlined,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(DeliveryPalette.statusIcon(d.status),
+                    size: 20, color: color),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('#${d.number}',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: context.mutedColor)),
+                    AppBadge(
+                      text: l10n.t(d.status.labelKey),
+                      color: color,
+                    ),
+                  ],
+                ),
+              ),
+              if (delayed)
+                AppBadge(
+                    text: l10n.t('delivery_delayed'),
+                    color: AppTheme.danger,
+                    icon: Icons.schedule_rounded),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(d.customerName.isEmpty ? '—' : d.customerName,
-              style:
-                  const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-          const SizedBox(height: 4),
+          const SizedBox(height: 10),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.place_outlined, size: 15, color: context.mutedColor),
-              const SizedBox(width: 4),
               Expanded(
-                child: Text(d.address,
-                    style: TextStyle(fontSize: 12.5, color: context.mutedColor),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
+                child: Text(d.customerName.isEmpty ? '—' : d.customerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 15)),
               ),
               if (d.customerPhone.isNotEmpty)
                 IconButton(
@@ -297,6 +382,19 @@ class _CourierHomePageState extends State<CourierHomePage> {
                 ),
             ],
           ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.place_outlined, size: 15, color: context.mutedColor),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(d.address,
+                    style: TextStyle(fontSize: 12.5, color: context.mutedColor),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
           if (d.itemsSummary.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(d.itemsSummary,
@@ -304,61 +402,25 @@ class _CourierHomePageState extends State<CourierHomePage> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Row(
             children: [
               Text('${l10n.t('delivery_fee')}: ${Money.format(d.fee)}',
-                  style: TextStyle(
+                  style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.success)),
+                      color: DeliveryPalette.teal)),
+              if (d.paymentOnDelivery) ...[
+                const SizedBox(width: 8),
+                AppBadge(
+                    text: Money.format(d.saleTotal),
+                    color: AppTheme.warning,
+                    icon: Icons.payments_outlined),
+              ],
               const Spacer(),
               Icon(Icons.chevron_left_rounded, color: context.mutedColor),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _payoutsCard() {
-    final l10n = context.l10n;
-    final payouts = DeliveryRepository.payoutsFor(_uid);
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.history_rounded, color: context.scheme.primary),
-              const SizedBox(width: 8),
-              Text(l10n.t('payout_history'),
-                  style: const TextStyle(fontWeight: FontWeight.w800)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (payouts.isEmpty)
-            Text(l10n.t('no_payouts_yet'),
-                style: TextStyle(fontSize: 12, color: context.mutedColor))
-          else
-            for (final p in payouts.take(5))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                          '${p.createdAt.day}/${p.createdAt.month}/${p.createdAt.year}'
-                          '${p.createdByName.isEmpty ? '' : ' · ${p.createdByName}'}',
-                          style: TextStyle(
-                              fontSize: 12, color: context.mutedColor)),
-                    ),
-                    Text(Money.format(p.amount),
-                        style:
-                            const TextStyle(fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              ),
         ],
       ),
     );

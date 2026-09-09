@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,12 +13,16 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/ui_kit.dart';
 import '../../../users/domain/entities/app_user.dart';
 import '../../data/delivery_repository.dart';
+import '../../data/delivery_stats.dart';
 import '../../domain/entities/delivery.dart';
 import '../widgets/delivery_map.dart';
+import '../widgets/delivery_style.dart';
+import '../widgets/slide_action.dart';
 
-/// One order on the courier's device: live map (his position + the
-/// customer's door), items, COD amount, and the big status buttons.
-/// Admins open the same screen read-only from the delivery board.
+/// One order, rider-app style: live map on top, COD banner, address strip,
+/// distance + ETA, timeline, and a big slide-to-confirm action at the
+/// bottom — impossible to fire by accident. Admins open the same screen
+/// read-only from the delivery board.
 class CourierDeliveryPage extends StatefulWidget {
   final String deliveryId;
 
@@ -40,14 +45,17 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
     super.dispose();
   }
 
-  Color _statusColor(BuildContext context, DeliveryStatus s) => switch (s) {
-        DeliveryStatus.pending => AppTheme.warning,
-        DeliveryStatus.assigned => Theme.of(context).colorScheme.primary,
-        DeliveryStatus.pickedUp => AppTheme.info,
-        DeliveryStatus.delivered => AppTheme.success,
-        DeliveryStatus.failed => AppTheme.danger,
-        DeliveryStatus.cancelled => context.mutedColor,
-      };
+  LatLng? _courierPosition(String? delivererId) {
+    if (delivererId == null || delivererId.isEmpty) return null;
+    final m = CloudDatabase.usersBox.get(delivererId);
+    if (m == null) return null;
+    final loc = (m as Map)['location'];
+    if (loc is! Map) return null;
+    final lat = (loc['lat'] as num?)?.toDouble();
+    final lng = (loc['lng'] as num?)?.toDouble();
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -80,9 +88,11 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
         d.status.isOpen;
     final hasDest = d.destLat != null && d.destLng != null;
     final courierLoc = _courierPosition(d.delivererId);
+    final color = DeliveryPalette.statusStyle(d.status, context.scheme);
 
     final markers = <DeliveryMapMarker>[];
     final line = <LatLng>[];
+    double? km;
     if (hasDest) {
       markers.add(DeliveryMapMarker(
         id: 'dest',
@@ -101,189 +111,367 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
         label: d.delivererName,
       ));
       if (hasDest) {
-        line.add(courierLoc);
-        line.add(LatLng(d.destLat!, d.destLng!));
+        line
+          ..add(courierLoc)
+          ..add(LatLng(d.destLat!, d.destLng!));
+        km = DeliveryStats.haversineKm(courierLoc.latitude,
+            courierLoc.longitude, d.destLat!, d.destLng!);
       }
     }
+    final next = d.status.nextByDeliverer;
 
-    final canNavigate = hasDest;
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${l10n.t('delivery_detail')} · #${d.number}'),
-        actions: [
-          IconButton(
-            tooltip: l10n.t('delivery_map_title'),
-            onPressed: canNavigate ? () => _openNavigation(d) : null,
-            icon: const Icon(Icons.directions_rounded),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (hasDest || courierLoc != null)
-            ClipRRect(
-              borderRadius: AppTheme.brMd,
-              child: SizedBox(
-                height: 230,
-                child: DeliveryMap(
-                  markers: markers,
-                  polyline: line,
-                  fitMarkers: true,
-                ),
+      backgroundColor: context.scheme.surface,
+      body: CustomScrollView(
+        slivers: [
+          // ── map hero ────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 290,
+              child: Stack(
+                children: [
+                  if (markers.isNotEmpty)
+                    Positioned.fill(
+                        child:
+                            DeliveryMap(markers: markers, polyline: line, fitMarkers: true))
+                  else
+                    Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            DeliveryPalette.deepTeal,
+                            DeliveryPalette.teal
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(Icons.delivery_dining_rounded,
+                            size: 84,
+                            color: Colors.white.withValues(alpha: 0.25)),
+                      ),
+                    ),
+                  // back + status floating
+                  SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      child: Row(
+                        children: [
+                          _glassButton(
+                            icon: Icons.arrow_back_ios_new_rounded,
+                            onTap: () => Navigator.of(context).maybePop(),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                      DeliveryPalette.statusIcon(
+                                          d.status),
+                                      size: 15,
+                                      color: Colors.white),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                        '${l10n.t('delivery_detail')} · #${d.number}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w700)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (d.destLat != null) ...[
+                            const SizedBox(width: 10),
+                            _glassButton(
+                              icon: Icons.directions_rounded,
+                              onTap: () => _openNavigation(d),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          if (hasDest || courierLoc != null) const SizedBox(height: 14),
+          ),
 
-          // -- customer card ------------------------------------------------
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    AppBadge(
-                      text: l10n.t(d.status.labelKey),
-                      color: _statusColor(context, d.status),
-                      icon: Icons.flag_outlined,
-                    ),
-                    const Spacer(),
-                    Text(Money.format(d.saleTotal),
-                        style: const TextStyle(
-                            fontSize: 17, fontWeight: FontWeight.w800)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(d.customerName.isEmpty ? '—' : d.customerName,
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.w700)),
-                if (d.customerPhone.isNotEmpty)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(d.customerPhone,
-                            style: TextStyle(color: context.mutedColor)),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 120),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // ── COD banner (Uber-style money callout) ──────────────
+                if (d.paymentOnDelivery) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFFBBF24)],
                       ),
-                      IconButton(
-                        tooltip: l10n.t('call_customer'),
-                        onPressed: () => launchUrl(
-                            Uri(scheme: 'tel', path: d.customerPhone)),
-                        icon: Icon(Icons.call_rounded,
-                            color: context.scheme.primary),
+                      borderRadius: AppTheme.brMd,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.payments_rounded,
+                            color: Colors.white, size: 26),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            l10n.t('cod_collect_amount',
+                                {'amount': Money.format(d.saleTotal)}),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 14.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // ── distance / ETA chips ───────────────────────────────
+                if (km != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        _chip(Icons.route_outlined,
+                            l10n.t('distance_km', {'km': km!.toStringAsFixed(1)})),
+                        const SizedBox(width: 8),
+                        _chip(Icons.schedule_rounded,
+                            l10n.t('eta_minutes', {'n': '${DeliveryStats.etaMinutes(km!)}'})),
+                      ],
+                    ),
+                  ),
+
+                // ── address & customer card ────────────────────────────
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: context
+                                .scheme.primaryContainer
+                                .withValues(alpha: 0.6),
+                            child: Icon(Icons.person_outline_rounded,
+                                color: context.scheme.primary, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                    d.customerName.isEmpty
+                                        ? '—'
+                                        : d.customerName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800)),
+                                if (d.customerPhone.isNotEmpty)
+                                  Text(d.customerPhone,
+                                      style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: context.mutedColor)),
+                              ],
+                            ),
+                          ),
+                          if (d.customerPhone.isNotEmpty)
+                            IconButton.filled(
+                              tooltip: l10n.t('call_customer'),
+                              style: IconButton.styleFrom(
+                                  backgroundColor: context.scheme.primary),
+                              onPressed: () => launchUrl(Uri(
+                                  scheme: 'tel', path: d.customerPhone)),
+                              icon: const Icon(Icons.call_rounded,
+                                  color: Colors.white, size: 18),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: context.scheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
+                          borderRadius: AppTheme.brSm,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.place_rounded,
+                                size: 18, color: context.scheme.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(d.address,
+                                  style: const TextStyle(
+                                      fontSize: 13, height: 1.35)),
+                            ),
+                            IconButton(
+                              tooltip: l10n.t('copy_address'),
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () {
+                                Clipboard.setData(
+                                    ClipboardData(text: d.address));
+                                showAppSnack(
+                                    context, l10n.t('address_copied'),
+                                    icon: Icons.content_copy_rounded);
+                              },
+                              icon: Icon(Icons.content_copy_rounded,
+                                  size: 16, color: context.mutedColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (d.itemsSummary.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.receipt_long_outlined,
+                                size: 15, color: context.mutedColor),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                  '${l10n.t('delivery_items')}: ${d.itemsSummary}',
+                                  style: const TextStyle(fontSize: 12.5)),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          AppBadge(
+                            text:
+                                '${l10n.t('delivery_fee')}: ${Money.format(d.fee)}',
+                            color: AppTheme.info,
+                            icon: Icons.payments_outlined,
+                          ),
+                          const SizedBox(width: 6),
+                          AppBadge(
+                            text: d.paymentOnDelivery
+                                ? l10n.t('courier_cod_collect')
+                                : l10n.t('courier_no_cash'),
+                            color: d.paymentOnDelivery
+                                ? AppTheme.warning
+                                : AppTheme.success,
+                          ),
+                          const Spacer(),
+                          Text(Money.format(d.saleTotal),
+                              style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w900)),
+                        ],
                       ),
                     ],
                   ),
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.place_outlined,
-                        size: 16, color: context.mutedColor),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(d.address,
-                          style: TextStyle(
-                              fontSize: 13, color: context.mutedColor)),
-                    ),
-                  ],
                 ),
-                if (d.itemsSummary.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                      '${l10n.t('delivery_items')}: ${d.itemsSummary}',
-                      style: const TextStyle(fontSize: 12.5)),
-                ],
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    AppBadge(
-                      text:
-                          '${l10n.t('delivery_fee')}: ${Money.format(d.fee)}',
-                      color: AppTheme.info,
-                      icon: Icons.payments_outlined,
-                    ),
-                    const SizedBox(width: 6),
-                    AppBadge(
-                      text: d.paymentOnDelivery
-                          ? l10n.t('courier_cod_collect')
-                          : l10n.t('courier_no_cash'),
-                      color: d.paymentOnDelivery
-                          ? AppTheme.warning
-                          : AppTheme.success,
-                      icon: d.paymentOnDelivery
-                          ? Icons.payments_rounded
+                const SizedBox(height: 14),
+                _timeline(context, d),
+              ]),
+            ),
+          ),
+        ],
+      ),
+
+      // ── bottom action zone ────────────────────────────────────────────
+      bottomNavigationBar: canAct
+          ? DeliveryBottomBar(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (next != null)
+                    SlideToConfirm(
+                      label: next == DeliveryStatus.pickedUp
+                          ? l10n.t('mark_picked_up')
+                          : l10n.t('mark_delivered'),
+                      icon: next == DeliveryStatus.pickedUp
+                          ? Icons.inventory_rounded
                           : Icons.check_circle_outline_rounded,
+                      color: next == DeliveryStatus.pickedUp
+                          ? context.scheme.primary
+                          : AppTheme.success,
+                      onConfirmed: () =>
+                          _setStatus(context, d, next),
                     ),
-                  ],
-                ),
-                if (d.delivererName != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(Icons.delivery_dining_outlined,
-                          size: 15, color: context.mutedColor),
-                      const SizedBox(width: 6),
-                      Text(
-                          '${l10n.t('assigned_to')}: ${d.delivererName}',
-                          style: const TextStyle(fontSize: 12.5)),
-                    ],
+                  const SizedBox(height: 4),
+                  TextButton.icon(
+                    onPressed: () =>
+                        _setStatus(context, d, DeliveryStatus.failed),
+                    icon: const Icon(Icons.error_outline_rounded, size: 17),
+                    label: Text(l10n.t('mark_failed'),
+                        style: const TextStyle(fontSize: 12.5)),
+                    style: TextButton.styleFrom(
+                        foregroundColor:
+                            Theme.of(context).colorScheme.error),
                   ),
                 ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          _timeline(context, d),
-          const SizedBox(height: 16),
-
-          // -- action buttons (courier only) --------------------------------
-          if (canAct && d.status == DeliveryStatus.assigned)
-            _actionButton(
-              context,
-              icon: Icons.inventory_rounded,
-              label: l10n.t('mark_picked_up'),
-              color: context.scheme.primary,
-              onTap: () =>
-                  _setStatus(context, d, DeliveryStatus.pickedUp),
-            ),
-          if (canAct && d.status == DeliveryStatus.pickedUp)
-            _actionButton(
-              context,
-              icon: Icons.check_circle_outline_rounded,
-              label: l10n.t('mark_delivered'),
-              color: AppTheme.success,
-              onTap: () =>
-                  _setStatus(context, d, DeliveryStatus.delivered),
-            ),
-          if (canAct)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: TextButton.icon(
-                onPressed: () =>
-                    _setStatus(context, d, DeliveryStatus.failed),
-                icon: const Icon(Icons.error_outline_rounded, size: 18),
-                label: Text(l10n.t('mark_failed')),
-                style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(context).colorScheme.error),
               ),
-            ),
-        ],
-      ),
+            )
+          : null,
     );
   }
 
   // ------------------------------------------------------------------ bits
 
-  LatLng? _courierPosition(String? delivererId) {
-    if (delivererId == null || delivererId.isEmpty) return null;
-    final m = CloudDatabase.usersBox.get(delivererId);
-    if (m == null) return null;
-    final loc = m['location'];
-    if (loc is! Map) return null;
-    final lat = (loc['lat'] as num?)?.toDouble();
-    final lng = (loc['lng'] as num?)?.toDouble();
-    if (lat == null || lng == null) return null;
-    return LatLng(lat, lng);
+  Widget _glassButton({required IconData icon, required VoidCallback onTap}) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(9),
+          child: Icon(icon, color: Colors.white, size: 17),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: context.scheme.primaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: context.scheme.primary),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: context.scheme.primary)),
+        ],
+      ),
+    );
   }
 
   Widget _timeline(BuildContext context, Delivery d) {
@@ -304,56 +492,74 @@ class _CourierDeliveryPageState extends State<CourierDeliveryPage> {
         children: [
           Text(l10n.t('delivery_timeline'),
               style: const TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 10),
-          for (final (icon, label, at) in rows)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
+          const SizedBox(height: 12),
+          for (var i = 0; i < rows.length; i++)
+            Builder(builder: (context) {
+              final (icon, label, at) = rows[i];
+              final done = at != null;
+              final isLast = i == rows.length - 1;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(icon,
-                      size: 17,
-                      color: at == null
-                          ? context.mutedColor.withValues(alpha: 0.5)
-                          : context.scheme.primary),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(label,
-                        style: TextStyle(
-                            fontSize: 12.5,
-                            color: at == null ? context.mutedColor : null,
-                            fontWeight: at == null
-                                ? FontWeight.w400
-                                : FontWeight.w600)),
+                  Column(
+                    children: [
+                      Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: done
+                              ? context.scheme.primary
+                              : context.scheme.surfaceContainerHighest,
+                        ),
+                        child: Icon(icon,
+                            size: 13,
+                            color: done
+                                ? Colors.white
+                                : context.mutedColor),
+                      ),
+                      if (!isLast)
+                        Container(
+                          width: 2,
+                          height: 26,
+                          color: done
+                              ? context.scheme.primary
+                                  .withValues(alpha: 0.35)
+                              : context.scheme.surfaceContainerHighest,
+                        ),
+                    ],
                   ),
-                  Text(
-                    at == null
-                        ? '—'
-                        : '${DateFormat('dd/MM').format(at)}  ${DateFormat.Hm().format(at)}',
-                    style: TextStyle(fontSize: 11.5, color: context.mutedColor),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(label,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: done ? null : context.mutedColor,
+                                    fontWeight: done
+                                        ? FontWeight.w700
+                                        : FontWeight.w400)),
+                          ),
+                          Text(
+                            at == null
+                                ? '—'
+                                : '${DateFormat('dd/MM').format(at)}  ${DateFormat.Hm().format(at)}',
+                            style: TextStyle(
+                                fontSize: 11.5,
+                                color: context.mutedColor),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
-              ),
-            ),
+              );
+            }),
         ],
-      ),
-    );
-  }
-
-  Widget _actionButton(BuildContext context,
-      {required IconData icon,
-      required String label,
-      required Color color,
-      required VoidCallback onTap}) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: onTap,
-        style: FilledButton.styleFrom(
-          backgroundColor: color,
-          padding: const EdgeInsets.symmetric(vertical: 15),
-        ),
-        icon: Icon(icon),
-        label: Text(label, style: const TextStyle(fontSize: 15.5)),
       ),
     );
   }

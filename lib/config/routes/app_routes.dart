@@ -44,6 +44,9 @@ import '../../features/delivery/presentation/pages/deliveries_page.dart';
 import '../../features/delivery/presentation/pages/delivery_tracking_page.dart';
 import '../../features/delivery/presentation/pages/courier_home_page.dart';
 import '../../features/delivery/presentation/pages/courier_delivery_page.dart';
+import '../../features/delivery/presentation/pages/courier_earnings_page.dart';
+import '../../features/delivery/presentation/pages/courier_history_page.dart';
+import '../../features/delivery/presentation/pages/deliverers_page.dart';
 
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
@@ -144,6 +147,10 @@ final router = GoRouter(
           path: 'map',
           builder: (context, state) => const DeliveryTrackingPage(),
         ),
+        GoRoute(
+          path: 'couriers',
+          builder: (context, state) => const DeliverersPage(),
+        ),
       ],
     ),
     GoRoute(
@@ -153,6 +160,14 @@ final router = GoRouter(
         GoRoute(
           path: 'map',
           builder: (context, state) => const DeliveryTrackingPage(),
+        ),
+        GoRoute(
+          path: 'earnings',
+          builder: (context, state) => const CourierEarningsPage(),
+        ),
+        GoRoute(
+          path: 'history',
+          builder: (context, state) => const CourierHistoryPage(),
         ),
         GoRoute(
           path: 'detail',
