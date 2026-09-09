@@ -94,6 +94,12 @@ class CloudBox<T> extends ChangeNotifier {
 
   Iterable<String> get keys => _cache.keys;
 
+  /// Decoded snapshot of the whole collection (kept for Hive-era call
+  /// sites that iterate `box.toMap()`).
+  Map<String, T> toMap() => {
+        for (final e in _cache.entries) e.key: _decode(e.value),
+      };
+
   T? get(dynamic key) {
     final raw = _cache['$key'];
     return raw == null ? null : _decode(raw);

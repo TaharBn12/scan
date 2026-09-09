@@ -39,13 +39,13 @@ class CloudDatabase {
   static final CloudBox<Product> productBox = CloudBox<Product>(
     name: 'products',
     encode: (p) => p.toMap(),
-    decode: (raw) => Product.fromMap(raw),
+    decode: (raw) => Product.fromMap(raw is Map ? raw : const {}),
   );
 
   static final CloudBox<Shop> shopBox = CloudBox<Shop>(
     name: 'shop',
     encode: (s) => s.toMap(),
-    decode: (raw) => Shop.fromMap(raw),
+    decode: (raw) => Shop.fromMap(raw is Map ? raw : const {}),
   );
 
   /// Key-value preferences (language, currency, counters, PIN hash…):
