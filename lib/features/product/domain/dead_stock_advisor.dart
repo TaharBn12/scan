@@ -1,5 +1,5 @@
 import 'entities/product.dart';
-import '../../../sales/domain/entities/sale.dart';
+import 'package:billing_app/features/sales/domain/entities/sale.dart';
 
 /// One product that stopped moving and is freezing cash on the shelf.
 class DeadStockItem {

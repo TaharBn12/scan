@@ -278,8 +278,10 @@ class _PromotionFormPageState extends State<PromotionFormPage> {
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
-                  onPressed: () =>
-                      setState(() => {_startAt = null, _endAt = null}),
+                  onPressed: () => setState(() {
+                        _startAt = null;
+                        _endAt = null;
+                      }),
                   child: Text(l10n.t('promo_no_window')),
                 ),
               ),

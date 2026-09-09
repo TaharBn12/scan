@@ -793,7 +793,6 @@ const Map<String, String> stringsAr = {
   'returnable': 'قابل للإرجاع',
   'already_returned': 'سُبق إرجاع {count}',
   'refund_value': 'المبلغ المُرجَع',
-  'none': 'لا شيء',
   'returns_section': 'المرتجعات',
   'effective_total': 'الصافي بعد الإرجاع',
   'fully_returned': 'مرتجعة كلياً',

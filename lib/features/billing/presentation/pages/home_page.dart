@@ -839,8 +839,8 @@ class _HomePageState extends State<HomePage>
           bloc.add(UpdateQuantityEvent(item.product.id, result.quantity));
           // Only an actually-edited price overrides — otherwise the
           // automatic (retail/wholesale) price keeps following the qty.
-          if (result.unitPrice != item.unitPrice) {
-            bloc.add(UpdateLinePriceEvent(item.product.id, result.unitPrice));
+          if (result.unitPrice != null && result.unitPrice != item.unitPrice) {
+            bloc.add(UpdateLinePriceEvent(item.product.id, result.unitPrice!));
           }
         },
         child: Row(

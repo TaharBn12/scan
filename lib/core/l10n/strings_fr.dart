@@ -812,7 +812,6 @@ const Map<String, String> stringsFr = {
   'returnable': 'Retournable',
   'already_returned': '{count} déjà retournés',
   'refund_value': 'Montant à rembourser',
-  'none': 'Aucun',
   'returns_section': 'Retours',
   'effective_total': 'Net après retours',
   'fully_returned': 'Entièrement retournée',

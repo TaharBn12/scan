@@ -501,7 +501,7 @@ void main() {
     });
 
     test('inactive or out-of-window offers stay silent', () {
-      final inactive = const Promotion(
+      const inactive = Promotion(
           id: 'pr6',
           name: 'off',
           productId: 'p1',

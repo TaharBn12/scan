@@ -1,4 +1,4 @@
-import '../../../product/domain/entities/product.dart';
+import 'package:billing_app/features/product/domain/entities/product.dart';
 import 'entities/purchase.dart';
 
 /// A purchase batch with an expiry date that is still (partly) on the shelf.

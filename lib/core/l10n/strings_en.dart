@@ -809,7 +809,6 @@ const Map<String, String> stringsEn = {
   'returnable': 'Returnable',
   'already_returned': '{count} already returned',
   'refund_value': 'Refund value',
-  'none': 'None',
   'returns_section': 'Returns',
   'effective_total': 'Net after returns',
   'fully_returned': 'Fully returned',
