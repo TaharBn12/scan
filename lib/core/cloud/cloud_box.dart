@@ -14,16 +14,18 @@ import 'package:flutter/foundation.dart';
 class CloudBox<T> extends ChangeNotifier {
   CloudBox({
     required this.name,
-    required Map<String, dynamic> Function(T value) encode,
-    required T Function(Map raw) decode,
+    required Object? Function(T value) encode,
+    required T Function(Object? raw) decode,
   })  : _encode = encode,
         _decode = decode;
 
   final String name;
-  final Map<String, dynamic> Function(T value) _encode;
-  final T Function(Map raw) _decode;
+  final Object? Function(T value) _encode;
+  final T Function(Object? raw) _decode;
 
-  final Map<String, Map<String, dynamic>> _cache = {};
+  /// Live mirror of the collection: id → raw value (maps deep-cast to
+  /// Map<String, dynamic>, scalars kept as-is for key-value boxes).
+  final Map<String, Object?> _cache = {};
   DatabaseReference? _ref;
   StreamSubscription<DatabaseEvent>? _sub;
 
@@ -42,7 +44,7 @@ class CloudBox<T> extends ChangeNotifier {
       final value = event.snapshot.value;
       if (value is Map) {
         value.forEach((k, v) {
-          if (v is Map) _cache['$k'] = _deepCast(v);
+          _cache['$k'] = v is Map ? deepCast(v) : v is List ? _castList(v) : v;
         });
       }
       notifyListeners();
@@ -67,15 +69,15 @@ class CloudBox<T> extends ChangeNotifier {
     notifyListeners();
   }
 
-  static Map<String, dynamic> _deepCast(Map raw) {
+  /// Recursively converts RTDB's loosely-typed maps into
+  /// Map<String, dynamic> / List<dynamic> the entities expect.
+  static Map<String, dynamic> deepCast(Map raw) {
     final out = <String, dynamic>{};
     raw.forEach((k, v) {
       if (v is Map) {
-        out['$k'] = _deepCast(v);
+        out['$k'] = deepCast(v);
       } else if (v is List) {
-        out['$k'] = v
-            .map((e) => e is Map ? _deepCast(e) : e)
-            .toList();
+        out['$k'] = _castList(v);
       } else {
         out['$k'] = v;
       }
@@ -83,16 +85,18 @@ class CloudBox<T> extends ChangeNotifier {
     return out;
   }
 
+  static List<dynamic> _castList(List raw) =>
+      raw.map((e) => e is Map ? deepCast(e) : e is List ? _castList(e) : e).toList();
+
   // ---------------------------------------------------------- Box-like API
 
-  Iterable<T> get values => _cache.values.map(_decodeChecked).toList()
-    ..sort((a, b) => 0); // order is defined by repositories, keep as-is
+  Iterable<T> get values => _cache.values.map(_decode).toList();
 
   Iterable<String> get keys => _cache.keys;
 
   T? get(dynamic key) {
     final raw = _cache['$key'];
-    return raw == null ? null : _decodeChecked(raw);
+    return raw == null ? null : _decode(raw);
   }
 
   bool containsKey(dynamic key) => _cache.containsKey('$key');
@@ -103,10 +107,10 @@ class CloudBox<T> extends ChangeNotifier {
 
   Future<void> put(dynamic key, T value) async {
     final k = '$key';
-    final map = _encode(value);
-    _cache[k] = map;
+    final encoded = _encode(value);
+    _cache[k] = encoded;
     notifyListeners();
-    await _ref?.child(_safeKey(k)).set(map);
+    await _ref?.child(_safeKey(k)).set(encoded);
   }
 
   Future<void> delete(dynamic key) async {
@@ -121,20 +125,15 @@ class CloudBox<T> extends ChangeNotifier {
     await _ref?.remove();
   }
 
-  T _decodeChecked(Map raw) {
-    try {
-      return _decode(raw);
-    } catch (_) {
-      // A corrupt entry must never take the whole collection down.
-      return _decode(<dynamic, dynamic>{});
-    }
-  }
-
   /// RTDB keys cannot contain `. # $ [ ] /` — ids are UUIDs/dates in this
   /// app, but sanitize defensively and keep a stable mapping both ways.
-  static String _safeKey(String key) =>
-      key.replaceAll('.', '_').replaceAll('#', '_').replaceAll('\$', '_')
-          .replaceAll('[', '_').replaceAll(']', '_').replaceAll('/', '_');
+  static String _safeKey(String key) => key
+      .replaceAll('.', '_')
+      .replaceAll('#', '_')
+      .replaceAll('\$', '_')
+      .replaceAll('[', '_')
+      .replaceAll(']', '_')
+      .replaceAll('/', '_');
 
   @override
   void dispose() {

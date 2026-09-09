@@ -36,8 +36,8 @@ class CloudMigrator {
       for (final p in localProducts.values) {
         payload['products/${p.id}'] = p.toMap();
       }
-      final shop = HiveDatabase.shopBox.get('current');
-      if (shop != null) payload['shop/current'] = shop.toMap();
+      final shop = HiveDatabase.shopBox.get('shop_details');
+      if (shop != null) payload['shop/shop_details'] = shop.toMap();
       for (final box in HiveDatabase.salesBox.toMap().entries) {
         payload['sales/${box.key}'] = _safe(box.value);
       }

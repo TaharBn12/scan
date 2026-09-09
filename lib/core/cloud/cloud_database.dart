@@ -48,7 +48,14 @@ class CloudDatabase {
     decode: (raw) => Shop.fromMap(raw),
   );
 
-  static final CloudBox<Map> settingsBox = _mapBox('settings');
+  /// Key-value preferences (language, currency, counters, PIN hash…):
+  /// values are scalars, so the box is dynamic.
+  static final CloudBox<dynamic> settingsBox = CloudBox<dynamic>(
+    name: 'settings',
+    encode: (v) => v,
+    decode: (raw) => raw,
+  );
+
   static final CloudBox<Map> salesBox = _mapBox('sales');
   static final CloudBox<Map> customersBox = _mapBox('customers');
   static final CloudBox<Map> expensesBox = _mapBox('expenses');
@@ -66,7 +73,7 @@ class CloudDatabase {
   static CloudBox<Map> _mapBox(String name) => CloudBox<Map>(
         name: name,
         encode: (m) => Map<String, dynamic>.from(m),
-        decode: (raw) => raw,
+        decode: (raw) => raw is Map ? raw : const <String, dynamic>{},
       );
 
   static List<CloudBox<dynamic>> get _all => [
