@@ -97,7 +97,7 @@ class HeldCartsStore {
   /// Reads the box into memory. Called once at startup.
   void load() {
     final items = CloudDatabase.heldCartsBox.values
-        .map((raw) => HeldCart.fromMap(raw))
+        .map((raw) => HeldCart.fromMap(Map<String, dynamic>.from(raw)))
         .where((c) => c.id.isNotEmpty && c.lines.isNotEmpty)
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
