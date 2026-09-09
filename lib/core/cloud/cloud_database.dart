@@ -107,8 +107,9 @@ class CloudDatabase {
 
   // ------------------------------------------------- raw path helpers
 
-  /// /shops/{shopId}/{boxName}
-  static DatabaseReference shopBox(String shopId, String boxName) =>
+  /// /shops/{shopId}/{boxName} — raw path helper (box getters keep the
+  /// Hive-style no-arg names like [salesBox]).
+  static DatabaseReference ref(String shopId, String boxName) =>
       _db.ref('shops/$shopId/$boxName');
 
   /// /users/{uid} — the small routing record for a user profile.

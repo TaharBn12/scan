@@ -107,15 +107,15 @@ class SplashPage extends StatelessWidget {
 
 /// Mandatory sign-in / registration. The router never lets an anonymous
 /// visitor past this page.
-class LoginPage extends StatefulWidget {
+class CloudLoginPage extends StatefulWidget {
   final CloudAuthController controller;
-  const LoginPage({super.key, required this.controller});
+  const CloudLoginPage({super.key, required this.controller});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<CloudLoginPage> createState() => _CloudLoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _CloudLoginPageState extends State<CloudLoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();

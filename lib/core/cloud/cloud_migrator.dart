@@ -19,7 +19,7 @@ class CloudMigrator {
     if (shopId == null) return;
     try {
       // Already migrated before (flag stored in the cloud settings)?
-      final settingsSnap = await CloudDatabase.shopBox(shopId, 'settings')
+      final settingsSnap = await CloudDatabase.ref(shopId, 'settings')
           .child('migrated_from_hive_at')
           .get();
       if (settingsSnap.exists) return;

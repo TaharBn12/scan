@@ -87,7 +87,7 @@ final router = GoRouter(
     ),
     GoRoute(
       path: '/cloud-login',
-      builder: (context, state) => LoginPage(controller: cloudAuth),
+      builder: (context, state) => CloudLoginPage(controller: cloudAuth),
     ),
     GoRoute(
       path: '/pending',

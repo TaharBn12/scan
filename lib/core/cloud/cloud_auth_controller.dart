@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 
 import '../../features/users/domain/entities/app_user.dart';
 import '../security/session_controller.dart';
@@ -20,7 +21,7 @@ Future<void> patchShopSettings(Map<String, dynamic> patch) async {
   final shopId = CloudDatabase.shopId;
   if (shopId == null) return;
   try {
-    await CloudDatabase.shopBox(shopId, 'settings')
+    await CloudDatabase.ref(shopId, 'settings')
         .child('app_settings')
         .update(patch);
   } catch (_) {/* offline: RTDB replays it later */}
@@ -168,7 +169,7 @@ class CloudAuthController extends ChangeNotifier {
 
   void _applyCloudSettings(String shopId) {
     _settingsSub?.cancel();
-    _settingsSub = CloudDatabase.shopBox(shopId, 'settings')
+    _settingsSub = CloudDatabase.ref(shopId, 'settings')
         .child('app_settings')
         .onValue
         .listen((event) {
@@ -263,7 +264,7 @@ class ShopAppSettings {
       };
 
   static Future<void> save(String shopId, Map<String, dynamic> patch) =>
-      CloudDatabase.shopBox(shopId, 'settings')
+      CloudDatabase.ref(shopId, 'settings')
           .child('app_settings')
           .update(patch);
 }
