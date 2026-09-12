@@ -73,6 +73,25 @@ DYNAMIC_KEYS = {
 }
 
 
+
+DECL_RE = re.compile(
+    r'^\s*(?:static\s+)?(?:const\s+|final\s+)*'
+    r'(?:[A-Za-z_$][\w$<>?,\s]*\s+)?([A-Za-z_$][\w$]*)\s*(?:=>|=|\()',
+    re.M,
+)
+GETTER_RE = re.compile(
+    r'^\s*(?:static\s+)?(?:const\s+)?[\w<>?,\s]+\s+get\s+([A-Za-z_$][\w$]*)',
+    re.M,
+)
+
+
+def declared_members(text: str) -> set:
+    """Names a class body declares: getters, consts, fields and methods."""
+    names = set(GETTER_RE.findall(text))
+    names.update(DECL_RE.findall(text))
+    return names
+
+
 def main() -> int:
     os.chdir(ROOT)
     files = sorted(glob.glob('lib/**/*.dart', recursive=True))
@@ -213,6 +232,38 @@ def main() -> int:
             if not (decls & imported):
                 errors.append(
                     f'{f}: uses type `{name}` without importing {sorted(decls)[0]}')
+
+
+    # 6 ------------------------------------------------ static members
+    #
+    # `StoreSchema.x` / `StoreColumns.x` are the seams this module adapts
+    # through: every repository reads its table and column names from them. A
+    # rename in store_schema.dart therefore breaks call sites all over the
+    # tree, and Dart would only report it at compile time — which cannot run
+    # here. This resolves those references statically.
+    schema_path = 'lib/core/supabase/store_schema.dart'
+    if os.path.isfile(schema_path):
+        schema_src = srcs[schema_path]
+        pools = {}
+        for cls in ('StoreSchema', 'StoreColumns'):
+            at = schema_src.find('class %s' % cls)
+            if at < 0:
+                continue
+            nxt = schema_src.find('\nclass ', at + 1)
+            body = schema_src[at:nxt if nxt > 0 else len(schema_src)]
+            pool = declared_members(body)
+            # `const StoreSchema._();` — the private constructor these classes
+            # use to stay non-instantiable. It is a real member.
+            if re.search(r'\b%s\s*\.\s*_\s*\(' % cls, body):
+                pool.add('_')
+            pools[cls] = pool
+        for f in files:
+            for cls, pool in pools.items():
+                if not pool:
+                    continue
+                for m in re.finditer(r'\b%s\.([A-Za-z_$][\w$]*)' % cls, code[f]):
+                    if m.group(1) not in pool:
+                        errors.append(f'{f}: {cls}.{m.group(1)} is not declared')
 
     print(f'checked {len(files)} dart files, {len(en)} localization keys, '
           f'{len(routes)} routes')

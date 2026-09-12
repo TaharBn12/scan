@@ -173,6 +173,30 @@ class StoreOrder extends Equatable {
   final String notes;
   final String courierId;
   final String shopId;
+
+  /// The merchant who owns the row. Every table in this schema is scoped by
+  /// `user_id`, so a write that omits it is invisible to the site's dashboard.
+  final String ownerId;
+
+  /// One order = one product, repeated [quantity] times. This schema has no
+  /// `order_items` table: `landing.html` inserts `product_id`, `product_name`
+  /// and `quantity` straight onto the order.
+  final String productId;
+  final String productName;
+  final double quantity;
+
+  /// Which bundle the customer picked ("عرض 3 قطع"), and how it was priced.
+  final String offerName;
+  final double purchaseCost;
+  final double profit;
+
+  /// `home` or `desk` — selects `price_home` / `price_desk` in shipping_rates.
+  final String shippingType;
+
+  /// Staff assignment: who phoned the customer, who boxed the parcel.
+  final String confirmerId;
+  final String packerId;
+
   final DateTime createdAt;
   final DateTime? updatedAt;
 
@@ -198,6 +222,16 @@ class StoreOrder extends Equatable {
     this.notes = '',
     this.courierId = '',
     this.shopId = '',
+    this.ownerId = '',
+    this.productId = '',
+    this.productName = '',
+    this.quantity = 1,
+    this.offerName = '',
+    this.purchaseCost = 0,
+    this.profit = 0,
+    this.shippingType = StoreColumns.shippingHome,
+    this.confirmerId = '',
+    this.packerId = '',
     required this.createdAt,
     this.updatedAt,
   });
@@ -214,40 +248,68 @@ class StoreOrder extends Equatable {
     return parts;
   }
 
+  /// Only the columns `public.orders` actually has.
+  ///
+  /// Mirrors the insert in `landing.html` exactly, so an order placed from the
+  /// app is indistinguishable from one placed on the site — the same dashboard,
+  /// the same confirmer queue, the same finance screen picks it up. Columns
+  /// this schema lacks (payment method, coupon, multi-line items) are left out
+  /// rather than sent, because Postgres rejects an insert naming them.
   Map<String, dynamic> toMap() => {
         StoreColumns.id: id,
-        StoreColumns.orderNumber: number,
+        if (ownerId.isNotEmpty) StoreColumns.userId: ownerId,
+        if (orderNumberIsSet) StoreColumns.orderNumber: number,
         StoreColumns.status: status.name,
-        StoreColumns.paymentMethod: payment.name,
-        StoreColumns.paymentStatus: paid ? 'paid' : 'unpaid',
-        StoreColumns.items: items.map((i) => i.toMap()).toList(),
-        StoreColumns.subtotal: subtotal,
-        StoreColumns.discount: discount,
-        StoreColumns.shippingFee: shippingFee,
-        StoreColumns.total: total,
-        StoreColumns.couponCode: couponCode,
+        if (productId.isNotEmpty) StoreColumns.productId: productId,
+        if (productName.isNotEmpty) StoreColumns.productName: productName,
+        StoreColumns.quantity: quantity,
+        if (offerName.isNotEmpty) StoreColumns.offerName: offerName,
         StoreColumns.customerName: customerName,
         StoreColumns.customerPhone: customerPhone,
-        StoreColumns.customerEmail: customerEmail,
-        StoreColumns.customerId_: customerId,
-        StoreColumns.addressLine: address,
-        StoreColumns.city: city,
+        if (customerId.isNotEmpty) StoreColumns.customerId_: customerId,
+        StoreColumns.total: total,
+        StoreColumns.purchaseCost: purchaseCost,
+        StoreColumns.shippingCost: shippingFee,
+        StoreColumns.profit: profit,
+        StoreColumns.shippingType: shippingType,
         StoreColumns.wilaya: wilaya,
+        StoreColumns.city: city,
+        StoreColumns.addressLine: address,
         StoreColumns.notes: notes,
-        StoreColumns.courierId: courierId,
-        StoreColumns.shopId: shopId,
-        StoreColumns.source: 'app',
+        if (confirmerId.isNotEmpty) StoreColumns.confirmerId: confirmerId,
+        if (packerId.isNotEmpty) StoreColumns.packerId: packerId,
         StoreColumns.createdAt: createdAt.toIso8601String(),
         StoreColumns.updatedAt: DateTime.now().toIso8601String(),
       };
 
+  /// `order_number` is nullable in the schema and the site leaves it empty on
+  /// insert; only send it when the app actually generated one.
+  bool get orderNumberIsSet => number.trim().isNotEmpty;
+;
+
   factory StoreOrder.fromMap(Map<String, dynamic> map) {
-    final items = Row.mapList(map, StoreColumns.items)
+    // This schema stores the order's single product inline. Rebuild it as a
+    // one-element list so the rest of the app can keep treating orders
+    // uniformly, whatever their source.
+    var items = Row.mapList(map, StoreColumns.items)
         .map(StoreOrderItem.fromMap)
         .toList();
+    final productId = Row.str(map, StoreColumns.productId);
+    final productName = Row.str(map, StoreColumns.productName);
+    final quantity = Row.num_(map, StoreColumns.quantity, 1);
+    if (items.isEmpty && (productId.isNotEmpty || productName.isNotEmpty)) {
+      items = [
+        StoreOrderItem(
+          productId: productId,
+          name: productName,
+          unitPrice: Row.num_(map, StoreColumns.total) / (quantity == 0 ? 1 : quantity),
+          quantity: quantity,
+        ),
+      ];
+    }
     final subtotal = Row.num_(map, StoreColumns.subtotal);
     final discount = Row.num_(map, StoreColumns.discount);
-    final shipping = Row.num_(map, StoreColumns.shippingFee);
+    final shipping = Row.num_(map, StoreColumns.shippingCost);
     final total = Row.num_(map, StoreColumns.total);
     final computedSubtotal = items.fold<double>(0, (s, i) => s + i.lineTotal);
     return StoreOrder(
@@ -275,6 +337,16 @@ class StoreOrder extends Equatable {
       notes: Row.str(map, StoreColumns.notes),
       courierId: Row.str(map, StoreColumns.courierId),
       shopId: Row.str(map, StoreColumns.shopId),
+      ownerId: Row.str(map, StoreColumns.userId),
+      productId: productId,
+      productName: productName,
+      quantity: quantity == 0 ? 1 : quantity,
+      offerName: Row.str(map, StoreColumns.offerName),
+      purchaseCost: Row.num_(map, StoreColumns.purchaseCost),
+      profit: Row.num_(map, StoreColumns.profit),
+      shippingType: Row.str(map, StoreColumns.shippingType, StoreColumns.shippingHome),
+      confirmerId: Row.str(map, StoreColumns.confirmerId),
+      packerId: Row.str(map, StoreColumns.packerId),
       createdAt: Row.date(map, StoreColumns.createdAt) ?? DateTime.now(),
       updatedAt: Row.date(map, StoreColumns.updatedAt),
     );
@@ -310,6 +382,16 @@ class StoreOrder extends Equatable {
         notes: notes ?? this.notes,
         courierId: courierId ?? this.courierId,
         shopId: shopId,
+        ownerId: ownerId,
+        productId: productId,
+        productName: productName,
+        quantity: quantity,
+        offerName: offerName,
+        purchaseCost: purchaseCost,
+        profit: profit,
+        shippingType: shippingType,
+        confirmerId: confirmerId,
+        packerId: packerId,
         createdAt: createdAt,
         updatedAt: DateTime.now(),
       );
@@ -318,7 +400,8 @@ class StoreOrder extends Equatable {
   List<Object?> get props => [
         id, number, status, payment, paid, items, subtotal, discount,
         shippingFee, total, couponCode, customerName, customerPhone, address,
-        city, wilaya, courierId, createdAt,
+        city, wilaya, courierId, createdAt, ownerId, productId, productName,
+        quantity, shippingType, confirmerId, packerId,
       ];
 }
 

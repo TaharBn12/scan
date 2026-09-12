@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/l10n/app_localizations.dart';
 import '../../../../core/supabase/store_connection.dart';
@@ -88,6 +89,13 @@ class _EcomSettingsPageState extends State<EcomSettingsPage> {
               ),
               const SizedBox(height: 10),
               _HealthCard(health: state.schemaHealth),
+              const SizedBox(height: 10),
+              MonoButton(
+                label: l10n.t('store_schema_title'),
+                outlined: true,
+                icon: Icons.travel_explore_rounded,
+                onPressed: () => context.push('/ecom/schema'),
+              ),
               const SizedBox(height: 24),
               MonoSectionTitle(title: l10n.t('ecom_storefront')),
               _StorefrontCard(

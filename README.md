@@ -42,16 +42,47 @@ https://github.com/user-attachments/assets/f2d16454-5408-43b3-b207-cd843bbc2c9e
 The same app now runs the shop's **website**: a customer-facing storefront and
 a management console, both reading the site's Supabase project.
 
+It ships bound to the merchant's own storefront
+(`https://cazwkhcbkzhnsluuafwz.supabase.co` — [TaharBn12/Ecommerce-site](https://github.com/TaharBn12/Ecommerce-site)).
+The URL and anon key are read out of the site's own HTML, where they are
+already public; that is how Supabase anon keys work — public, and gated by
+row-level security rather than secrecy. Another project can still be selected
+without editing files:
+
 ```bash
 flutter run \
   --dart-define=SUPABASE_URL=https://abcdefgh.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
-Nothing is committed: both values are compile-time constants, and a merchant
-who cannot rebuild can paste them in *E-commerce → Store settings → Connection*
-(stored on the device, and taking precedence over the build-time default).
-An unconfigured link never blocks the POS — the till works exactly as before.
+or pasted in *E-commerce → Store settings → Connection* (stored on the device,
+taking precedence over the build-time default). An unconfigured link never
+blocks the POS — the till works exactly as before.
+
+**The site is multi-tenant.** Every row carries `user_id` and its RLS policy is
+`auth.uid() = user_id`, so the repositories scope each query with the signed-in
+merchant and stamp every insert. A write without `user_id` would be invisible
+to the site's own dashboard.
+
+### Matching the site's real schema
+
+The definitions are committed under `reference/site/`, copied from the site's
+own SQL, and the app matches them exactly:
+
+| | |
+|---|---|
+| `products` | `title`, `stock_quantity`, `main_image_url`, `images[]`, `bottom_images[]`, `category` (a text column — there is no categories table), and `status` doubling as the publish switch (`shop.html` only selects `active`) |
+| `orders` | **One product per order**: `product_id`, `product_name`, `quantity`, `offer_name`, plus `selling_price`, `purchase_cost`, `shipping_cost`, `profit`, `wilaya`, `commune`, `shipping_type`, `confirmer_id`, `packer_id` |
+| `customers` | `full_name`, `phone`, `total_orders`, `returned_orders`, `total_spent` — no email column |
+| `store_settings` | keyed by `user_id`, not `id`: `store_name`, `store_slug`, `logo_url`, the three tracking ids, `primary_color`, `currency` |
+| `shipping_rates` | 58 pre-seeded wilayas × `price_home` / `price_desk`, publicly readable |
+| `profiles` | merchants **and** the confirmers and packers, told apart by `role` + `merchant_id`, with their rates on the same row |
+
+Two consequences worth knowing. `published` is written as the `status` text,
+not a boolean, because that is the switch the site filters on. And the app
+never sends a column the site lacks — the settings it keeps that have no
+counterpart (payment toggles, support contacts, socials) go to `localMap()` and
+stay on the device, instead of making Postgres reject the whole upsert.
 
 ### Two sides, one catalogue
 
@@ -77,13 +108,23 @@ parcel — and `StoreOrderStatus.fromName` also understands the spellings other
 storefront templates use (`new`, `accepted`, `out_for_delivery`, `completed`…),
 so importing an existing site needs no mapping table.
 
-### Adapting to your site's schema
+### Adapting to a different schema
 
 Table and column names live in **one** file, `lib/core/supabase/store_schema.dart`.
 Tables are getters, so they can be re-pointed at runtime
 (`StoreSchema.applyOverrides({'orders': 'commandes'})`) without a rebuild, and
 `StoreColumns.read` accepts both `snake_case` and `camelCase` spellings.
-The connection screen lists which tables actually exist in the project.
+
+*E-commerce → Settings → Database structure* goes further: it asks the project
+for one row of each table and reads the column names from what comes back,
+proposes a mapping, and applies it. PostgREST cannot list `information_schema`,
+so probing is what lets the app bind itself to a storefront whose source nobody
+opened.
+
+The features the site has no table for — coupons, banners, reviews, saved
+addresses, wishlist, multi-line items, payouts — are served from the app's own
+`store_*` tables in the same project. Run `supabase_optional_tables.sql` in the
+SQL editor to create them; until then those screens say so instead of failing.
 
 ### Monochrome design system
 
@@ -103,8 +144,18 @@ families), navigation targets that are not routed, unbalanced delimiters and
 types referenced without being imported:
 
 ```bash
-python3 tool/check_consistency.py    # 201 files, 1160 keys, 73 routes
+python3 tool/check_consistency.py   # 205 files, 1171 keys, 74 routes
+python3 tool/check_schema.py        # 55 columns vs reference/site/*.sql
 ```
+
+`check_consistency.py` additionally resolves every `StoreSchema.x` /
+`StoreColumns.x` reference, because renaming a column in the schema map breaks
+call sites across the tree and only a compiler would otherwise say so.
+
+`check_schema.py` is the check that matters most here: it parses the site's own
+SQL and fails if any entity's `toMap()` emits a column the database does not
+have. That is a bug Dart compiles happily and only the server catches. Both
+tools were verified by injecting the faults they claim to detect.
 
 ## 🔒 Privacy & offline guarantees
 

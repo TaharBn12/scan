@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/error/failure.dart';
 import '../../../../core/supabase/store_connection.dart';
+import '../../../../core/supabase/store_schema.dart';
 import '../../../../core/supabase/supabase_errors.dart';
 
 /// Shared plumbing for every Supabase-backed store repository.
@@ -17,6 +18,28 @@ mixin StoreRepositoryBase {
 
   /// True when queries may run at all.
   bool get isLinked => storeConnection.isOnline && _client != null;
+
+  /// The signed-in merchant's `user_id`.
+  ///
+  /// This storefront is multi-tenant: `products`, `orders`, `customers` and
+  /// `store_settings` all carry a `user_id` and their RLS policies are
+  /// `auth.uid() = user_id`. Every query has to be scoped, or it silently
+  /// returns nothing (or, on a lax policy, somebody else's shop).
+  String? get merchantId => _client?.auth.currentUser?.id;
+
+  /// Applies the tenant filter when we know who is signed in. Guest browsing
+  /// still works, because the site's public policies allow anonymous reads.
+  T scoped<T extends PostgrestFilterBuilder>(T builder, String column) {
+    final owner = merchantId;
+    return owner == null ? builder : builder.eq(column, owner) as T;
+  }
+
+  /// Merges the tenant key into a row about to be written.
+  Map<String, dynamic> owned(Map<String, dynamic> row, {String? ownerId}) {
+    final owner = ownerId ?? merchantId;
+    if (owner == null || row.containsKey(StoreColumns.userId)) return row;
+    return {StoreColumns.userId: owner, ...row};
+  }
 
   /// Runs [body], converting every failure into a localized [ServerFailure].
   Future<Either<Failure, T>> guard<T>(

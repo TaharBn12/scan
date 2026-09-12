@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'schema_probe.dart';
 import 'store_schema.dart';
 import 'supabase_config.dart';
 
@@ -112,6 +113,8 @@ class StoreConnection extends ChangeNotifier {
         _client = Supabase.instance.client;
       }
       await _probe();
+      // A schema mapped in an earlier session is re-applied before any query.
+      SchemaBinder.restore();
       _lastError = null;
       _connectedAt = DateTime.now();
       _listenAuth();

@@ -102,13 +102,26 @@ class StoreCustomer extends Equatable {
     return (parts.first.substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
   }
 
+  /// Only the columns `public.customers` actually has.
+  ///
+  /// The site counts orders and spend on the row itself (`total_orders`,
+  /// `total_spent`), so those are written under its own names. It keeps no
+  /// `email` and no `blocked` flag, so neither is sent — an UPDATE naming them
+  /// would be rejected outright. Both stay in [localMap] instead.
   Map<String, dynamic> toMap() => {
         StoreColumns.id: id,
         StoreColumns.fullName: name,
-        StoreColumns.customerEmail: email,
         StoreColumns.phone: phone,
-        'orders_count': ordersCount,
-        'lifetime_value': lifetimeValue,
+        StoreColumns.totalOrders: ordersCount,
+        StoreColumns.totalSpent: lifetimeValue,
+        StoreColumns.createdAt:
+            (createdAt ?? DateTime.now()).toIso8601String(),
+      };
+
+  /// Fields with no server column — persisted locally so the app's own
+  /// features (the blocked list, the email column) survive a restart.
+  Map<String, dynamic> localMap() => {
+        StoreColumns.customerEmail: email,
         'blocked': blocked,
       };
 

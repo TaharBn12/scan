@@ -86,7 +86,8 @@ class StoreOrderRepository with StoreRepositoryBase {
   /// Places an order (and its lines, when the schema has a side table).
   Future<Either<Failure, StoreOrder>> placeOrder(StoreOrder order) {
     return guard((client) async {
-      final stored = await insertOne(client, StoreSchema.orders, order.toMap());
+      // Same columns `landing.html` writes, plus the tenant key.
+      final stored = await insertOne(client, StoreSchema.orders, owned(order.toMap()));
       final saved = stored == null
           ? order
           : StoreOrder.fromMap(stored);

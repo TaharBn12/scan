@@ -97,28 +97,44 @@ class StoreProduct extends Equatable {
       .replaceAll(RegExp(r'-{2,}'), '-')
       .replaceAll(RegExp(r'^-|-$'), '');
 
-  Map<String, dynamic> toMap() => {
+  /// Only the columns `public.products` actually has.
+  ///
+  /// The translated names, barcode, rating and unit are kept in memory (and in
+  /// the local Hive cache) but are *not* sent: the site's table has no such
+  /// column, and Postgres rejects an insert that names one. `published` is
+  /// written as the `status` text the storefront filters on.
+  Map<String, dynamic> toMap({String? ownerId}) => {
         StoreColumns.id: id,
+        if (ownerId != null && ownerId.isNotEmpty) StoreColumns.userId: ownerId,
         StoreColumns.name: name,
-        StoreColumns.nameAr: nameAr,
-        StoreColumns.nameFr: nameFr,
         StoreColumns.slug: effectiveSlug,
         StoreColumns.description: description,
-        StoreColumns.descriptionAr: descriptionAr,
         StoreColumns.price: price,
         StoreColumns.compareAtPrice: compareAtPrice,
         StoreColumns.costPrice: costPrice,
         StoreColumns.stock: stock,
         StoreColumns.sku: sku,
-        StoreColumns.barcode: barcode,
         StoreColumns.categoryId: categoryId,
+        StoreColumns.image: images.isEmpty ? '' : images.first,
         StoreColumns.images: images,
-        StoreColumns.published: published,
-        StoreColumns.featured: featured,
-        StoreColumns.soldCount: soldCount,
-        StoreColumns.unit: unit,
+        StoreColumns.published: statusValue,
         StoreColumns.updatedAt: DateTime.now().toIso8601String(),
       };
+
+  /// `status` doubles as the publish switch — `shop.html` only ever selects
+  /// rows where it equals `active`.
+  String get statusValue =>
+      published ? StoreSchema.publishedValue : StoreSchema.draftValue;
+
+  /// Reads the publish state from either shape: the `status` text this schema
+  /// uses, or a boolean column if a project was set up from an older copy.
+  static bool publishedFrom(Map<String, dynamic> map) {
+    final raw = map[StoreSchema.productStatusColumn];
+    if (raw is String && raw.trim().isNotEmpty) {
+      return raw.trim().toLowerCase() == StoreSchema.publishedValue;
+    }
+    return Row.bool_(map, StoreColumns.published, true);
+  }
 
   factory StoreProduct.fromMap(Map<String, dynamic> map) {
     final images = Row.list(map, StoreColumns.images);
@@ -143,7 +159,7 @@ class StoreProduct extends Equatable {
       barcode: Row.str(map, StoreColumns.barcode),
       categoryId: Row.str(map, StoreColumns.categoryId),
       images: gallery,
-      published: Row.bool_(map, StoreColumns.published, true),
+      published: publishedFrom(map),
       featured: Row.bool_(map, StoreColumns.featured),
       rating: Row.num_(map, StoreColumns.rating),
       reviewsCount: Row.int_(map, 'reviews_count'),

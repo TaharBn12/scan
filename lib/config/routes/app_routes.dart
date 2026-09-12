@@ -69,6 +69,7 @@ import '../../features/ecom_admin/presentation/pages/ecom_settings_page.dart';
 import '../../features/ecom_admin/presentation/pages/ecom_product_form_page.dart';
 import '../../features/ecom_admin/presentation/pages/ecom_marketing_page.dart';
 import '../../features/ecom_admin/presentation/pages/ecom_crm_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_schema_page.dart';
 
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
@@ -444,6 +445,10 @@ final router = GoRouter(
         GoRoute(
           path: 'settings',
           builder: (context, state) => const EcomSettingsPage(),
+        ),
+        GoRoute(
+          path: 'schema',
+          builder: (context, state) => const EcomSchemaPage(),
         ),
       ],
     ),

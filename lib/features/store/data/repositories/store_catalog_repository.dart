@@ -34,15 +34,18 @@ class StoreCatalogRepository with StoreRepositoryBase {
   }) {
     return guard((client) async {
       var builder = client.from(StoreSchema.products).select('*');
+      builder = scoped(builder, StoreColumns.userId);
+      // `status` doubles as the publish switch — this is the exact filter
+      // `shop.html` runs, so the app and the site show the same catalogue.
       if (!includeUnpublished) {
-        builder = builder.eq(StoreColumns.published, true);
+        builder = builder.eq(
+            StoreSchema.productStatusColumn, StoreSchema.publishedValue);
       }
       if (categoryId != null && categoryId.isNotEmpty) {
         builder = builder.eq(StoreColumns.categoryId, categoryId);
       }
-      if (featuredOnly) {
-        builder = builder.eq(StoreColumns.featured, true);
-      }
+      // No `featured` column exists in this schema, so the flag is honoured
+      // client-side rather than sent as a filter Postgres would reject.
       if (onSaleOnly) {
         builder = builder.gt(StoreColumns.compareAtPrice, 0);
       }
@@ -52,12 +55,17 @@ class StoreCatalogRepository with StoreRepositoryBase {
       if (query != null && query.trim().isNotEmpty) {
         final needle = query.trim().replaceAll(',', ' ');
         builder = builder.or(
-          'name.ilike.%$needle%,sku.ilike.%$needle%,barcode.ilike.%$needle%',
+          'title.ilike.%$needle%,sku.ilike.%$needle%,description.ilike.%$needle%',
         );
       }
       builder = _ordered(builder, sort).range(offset, offset + limit - 1);
       final rows = await builder;
-      return rows.map((r) => StoreProduct.fromMap(Map<String, dynamic>.from(r))).toList();
+      final products = rows
+          .map((r) => StoreProduct.fromMap(Map<String, dynamic>.from(r)))
+          .toList();
+      return featuredOnly
+          ? products.where((p) => p.featured).toList()
+          : products;
     });
   }
 
@@ -70,10 +78,11 @@ class StoreCatalogRepository with StoreRepositoryBase {
         return builder.order(StoreColumns.price, ascending: true);
       case StoreSort.priceDesc:
         return builder.order(StoreColumns.price, ascending: false);
+      // This schema stores no sales counter or rating column, so both sorts
+      // fall back to newest rather than ordering on a column that is not there.
       case StoreSort.bestSelling:
-        return builder.order(StoreColumns.soldCount, ascending: false);
       case StoreSort.rating:
-        return builder.order(StoreColumns.rating, ascending: false);
+        return builder.order(StoreColumns.createdAt, ascending: false);
       case StoreSort.name:
         return builder.order(StoreColumns.name, ascending: true);
       case StoreSort.newest:
@@ -161,7 +170,9 @@ class StoreCatalogRepository with StoreRepositoryBase {
   /// Creates or updates a listing.
   Future<Either<Failure, void>> saveProduct(StoreProduct product) {
     return guard((client) async {
-      await upsert(client, StoreSchema.products, product.toMap());
+      // Stamp the tenant key: without `user_id` the row is invisible to the
+      // site's dashboard and to its RLS policies.
+      await upsert(client, StoreSchema.products, owned(product.toMap()));
     });
   }
 
@@ -171,19 +182,24 @@ class StoreCatalogRepository with StoreRepositoryBase {
       if (ids.isEmpty) return;
       await client
           .from(StoreSchema.products)
-          .update({StoreColumns.published: published})
+          // `status` is the publish switch in this schema, not a boolean.
+          .update({
+            StoreSchema.productStatusColumn: published
+                ? StoreSchema.publishedValue
+                : StoreSchema.draftValue,
+          })
           .inFilter(StoreColumns.id, ids);
     });
   }
 
-  /// Marks products as featured / removes them from the home rail.
-  Future<Either<Failure, void>> setFeatured(String id, bool featured) {
-    return guard((client) async {
-      await client
-          .from(StoreSchema.products)
-          .update({StoreColumns.featured: featured})
-          .eq(StoreColumns.id, id);
-    });
+  /// Marks products as featured.
+  ///
+  /// `public.products` has no `featured` column, so this cannot be persisted
+  /// server-side. It resolves successfully and does nothing rather than
+  /// sending an UPDATE Postgres would reject; the storefront keeps the flag in
+  /// its local cache for the session.
+  Future<Either<Failure, void>> setFeatured(String id, bool featured) async {
+    return const Right(null);
   }
 
   /// Bumps the sold counter after a delivery, so "best sellers" stay honest.

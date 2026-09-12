@@ -2,9 +2,11 @@ import '../cloud/cloud_database.dart';
 
 /// Where the e-commerce site lives.
 ///
-/// Nothing is hard-coded: the storefront's Supabase project is injected at
-/// build time so the same source can point at a staging or a production
-/// project without editing files — and no key is ever committed to git.
+/// Defaults point at the merchant's own project, whose URL and anon key are
+/// already published in the site's HTML (that is how Supabase anon keys are
+/// meant to work — they are public and gated by row-level security, not
+/// secret). A staging or production project can still be selected without
+/// editing files, via `--dart-define` or the Connection screen.
 ///
 /// ```bash
 /// flutter run \
@@ -21,9 +23,21 @@ class SupabaseConfig {
   static const String _settingsKeyUrl = 'supabase_url';
   static const String _settingsKeyAnon = 'supabase_anon_key';
 
-  /// Compile-time values (`--dart-define`), empty when not provided.
-  static const String buildUrl = String.fromEnvironment('SUPABASE_URL');
-  static const String buildAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  /// The storefront's project, read out of its own HTML (`shop.html`,
+  /// `landing.html` — `SB_URL` / `SB_KEY`).
+  static const String siteUrl = 'https://cazwkhcbkzhnsluuafwz.supabase.co';
+  static const String siteAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhendraGNia3pobnNsdXVhZnd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NDQ3ODIsImV4cCI6MjA4MzUyMDc4Mn0.u1l9BrzI7ZA9P3CSdXN0tYkHu1TUNTGsqczByNSPUN0';
+
+  /// Compile-time values (`--dart-define`), falling back to the site's own.
+  static const String buildUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: siteUrl,
+  );
+  static const String buildAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: siteAnonKey,
+  );
 
   /// Values typed by the merchant at runtime ('' = never set).
   static String get storedUrl =>
