@@ -17,6 +17,10 @@ class HiveDatabase {
   static const String heldCartsBoxName = 'held_carts';
   static const String shiftsBoxName = 'shifts';
   static const String promotionsBoxName = 'promotions';
+  // E-commerce module: the shopper's basket and guest wishlist survive a
+  // restart so an interrupted checkout is never lost.
+  static const String storeCartBoxName = 'store_cart';
+  static const String storeWishlistBoxName = 'store_wishlist';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -44,6 +48,8 @@ class HiveDatabase {
     await Hive.openBox(shiftsBoxName);
     // Automatic price offers ("pay 2 take 3", category discounts...).
     await Hive.openBox(promotionsBoxName);
+    await Hive.openBox(storeCartBoxName);
+    await Hive.openBox(storeWishlistBoxName);
 
     // Legacy: the app used to keep an outbox for the removed website /
     // cloud sync. Drop it so old installs stop carrying dead data.
@@ -69,4 +75,6 @@ class HiveDatabase {
   static Box get heldCartsBox => Hive.box(heldCartsBoxName);
   static Box get shiftsBox => Hive.box(shiftsBoxName);
   static Box get promotionsBox => Hive.box(promotionsBoxName);
+  static Box get storeCartBox => Hive.box(storeCartBoxName);
+  static Box get storeWishlistBox => Hive.box(storeWishlistBoxName);
 }

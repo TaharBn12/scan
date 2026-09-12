@@ -23,6 +23,7 @@ import 'features/settings/presentation/bloc/printer_bloc.dart';
 import 'features/settings/presentation/bloc/printer_event.dart';
 import 'features/sales/presentation/bloc/sale_bloc.dart';
 import 'features/customers/presentation/bloc/customer_bloc.dart';
+import 'features/store/presentation/bloc/store_admin_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,6 +71,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   late final CustomerBloc _customerBloc = di.sl<CustomerBloc>();
   late final ExpenseBloc _expenseBloc = di.sl<ExpenseBloc>();
   late final InventoryBloc _inventoryBloc = di.sl<InventoryBloc>();
+
+  /// Shared by every `/ecom/*` route so the console's tabs never disagree.
+  late final StoreAdminBloc _storeAdminBloc = di.sl<StoreAdminBloc>();
 
   CloudAuthState _lastAuthState = CloudAuthState.unknown;
 
@@ -144,6 +148,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             value: _expenseBloc..add(LoadExpenses())),
         BlocProvider<InventoryBloc>.value(
             value: _inventoryBloc..add(LoadInventory())),
+        BlocProvider<StoreAdminBloc>.value(value: _storeAdminBloc),
       ],
       child: ValueListenableBuilder<ThemeSettings>(
         valueListenable: themeController,

@@ -17,6 +17,7 @@ import '../../../inventory/presentation/bloc/inventory_bloc.dart';
 import '../../../product/domain/dead_stock_advisor.dart';
 import '../../../product/presentation/bloc/product_bloc.dart';
 import '../../../sales/presentation/bloc/sale_bloc.dart';
+import '../../../store/presentation/bloc/store_admin_bloc.dart';
 import '../../../shifts/data/shift_store.dart';
 import '../../../shop/presentation/bloc/shop_bloc.dart';
 
@@ -252,6 +253,25 @@ class MenuPage extends StatelessWidget {
                           onTap: () => context.push('/shop'),
                         ),
                       ]),
+                      const SizedBox(height: 24),
+                      // ---- the website: shop as a customer, then run it ----
+                      SectionHeader(title: l10n.t('menu_ecommerce')),
+                      _WideTile(
+                        icon: Icons.storefront_rounded,
+                        label: l10n.t('menu_open_store'),
+                        subtitle: l10n.t('menu_open_store_subtitle'),
+                        onTap: () => context.push('/store'),
+                      ),
+                      const SizedBox(height: 10),
+                      if (isAdmin || canSeeMoney)
+                        BlocBuilder<StoreAdminBloc, StoreAdminState>(
+                          builder: (context, ecom) => _WideTile(
+                            icon: Icons.dashboard_customize_rounded,
+                            label: l10n.t('ecom_title'),
+                            subtitle: l10n.t('menu_ecommerce_subtitle'),
+                            onTap: () => context.push('/ecom'),
+                          ),
+                        ),
                       const SizedBox(height: 24),
                       SectionHeader(title: l10n.more),
                       _WideTile(

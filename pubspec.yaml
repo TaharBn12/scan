@@ -35,6 +35,10 @@ dependencies:
   firebase_auth: ^5.7.0
   firebase_database: ^11.3.6
 
+  # E-commerce site (Supabase). URL + anon key are injected at build time:
+  #   --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_ANON_KEY=...
+  supabase_flutter: ^2.8.0
+
   # Delivery & maps (OpenStreetMap — no API key required)
   flutter_map: ^7.0.2
   latlong2: ^0.9.1

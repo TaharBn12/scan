@@ -110,6 +110,9 @@ class SessionController extends ChangeNotifier {
     if (starts('/customers/debts')) return canManageCustomers;
     // Delivery board + live tracking: who is trusted with the money view.
     if (starts('/deliveries')) return canViewReports;
+    // The e-commerce console moves real money and real stock; the storefront
+    // itself stays open to everyone so a cashier can check what customers see.
+    if (starts('/ecom')) return isAdmin || canViewReports;
     // The courier's own screens: himself, or an admin looking over.
     if (starts('/courier')) return role == UserRole.deliverer || isAdmin;
     return true;

@@ -47,6 +47,28 @@ import '../../features/delivery/presentation/pages/courier_delivery_page.dart';
 import '../../features/delivery/presentation/pages/courier_earnings_page.dart';
 import '../../features/delivery/presentation/pages/courier_history_page.dart';
 import '../../features/delivery/presentation/pages/deliverers_page.dart';
+import '../../features/storefront/presentation/pages/store_shell_page.dart';
+import '../../features/storefront/presentation/pages/store_browse_page.dart';
+import '../../features/storefront/presentation/pages/store_product_page.dart';
+import '../../features/storefront/presentation/pages/store_cart_page.dart';
+import '../../features/storefront/presentation/pages/store_checkout_page.dart';
+import '../../features/storefront/presentation/pages/store_orders_page.dart';
+import '../../features/storefront/presentation/pages/store_order_detail_page.dart';
+import '../../features/storefront/presentation/pages/store_search_page.dart';
+import '../../features/storefront/presentation/pages/store_wishlist_page.dart';
+import '../../features/storefront/presentation/pages/store_offers_page.dart';
+import '../../features/storefront/presentation/pages/store_support_page.dart';
+import '../../features/store/domain/entities/store_order.dart';
+import '../../features/store/domain/entities/store_product.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_admin_home_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_orders_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_order_detail_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_products_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_sync_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_settings_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_product_form_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_marketing_page.dart';
+import '../../features/ecom_admin/presentation/pages/ecom_crm_page.dart';
 
 /// Routes only an admin may open when multi-user mode is on. Cashiers get
 /// bounced to the menu (the menu hides these entries anyway).
@@ -302,6 +324,128 @@ final router = GoRouter(
     GoRoute(
       path: '/users',
       builder: (context, state) => UsersPage(controller: cloudAuth),
+    ),
+    // ---- E-commerce: the customer-facing shop ----
+    //
+    // Hosted inside the POS so the owner can walk his own site exactly as a
+    // shopper sees it. Deep links (/store/product/:id, /store/order/:id) work
+    // on their own, wrapped in the monochrome theme by the shell.
+    GoRoute(
+      path: '/store',
+      builder: (context, state) => const StoreShellPage(),
+      routes: [
+        GoRoute(
+          path: 'browse',
+          builder: (context, state) => const StoreBrowsePage(),
+        ),
+        GoRoute(
+          path: 'category/:id',
+          builder: (context, state) =>
+              StoreBrowsePage(categoryId: state.pathParameters['id']!),
+        ),
+        GoRoute(
+          path: 'offers',
+          builder: (context, state) => const StoreOffersPage(),
+        ),
+        GoRoute(
+          path: 'search',
+          builder: (context, state) => const StoreSearchPage(),
+        ),
+        GoRoute(
+          path: 'wishlist',
+          builder: (context, state) => const StoreWishlistPage(),
+        ),
+        GoRoute(
+          path: 'cart',
+          builder: (context, state) => const StoreCartPage(),
+        ),
+        GoRoute(
+          path: 'addresses',
+          builder: (context, state) => const StoreAddressesPage(),
+        ),
+        GoRoute(
+          path: 'support',
+          builder: (context, state) => const StoreSupportPage(),
+        ),
+        GoRoute(
+          path: 'checkout',
+          builder: (context, state) => const StoreCheckoutPage(),
+        ),
+        GoRoute(
+          path: 'orders',
+          builder: (context, state) => const StoreOrdersPage(),
+        ),
+        GoRoute(
+          path: 'order/:id',
+          builder: (context, state) =>
+              StoreOrderDetailPage(order: state.extra as StoreOrder?),
+        ),
+        GoRoute(
+          path: 'product/:id',
+          builder: (context, state) =>
+              StoreProductPage(productId: state.pathParameters['id']!),
+        ),
+      ],
+    ),
+
+    // ---- E-commerce: the management console ----
+    GoRoute(
+      path: '/ecom',
+      builder: (context, state) => const EcomAdminHomePage(),
+      routes: [
+        GoRoute(
+          path: 'orders',
+          builder: (context, state) => const EcomOrdersPage(),
+          routes: [
+            GoRoute(
+              path: ':id',
+              builder: (context, state) =>
+                  EcomOrderDetailPage(order: state.extra as StoreOrder?),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: 'products',
+          builder: (context, state) => const EcomProductsPage(),
+          routes: [
+            GoRoute(
+              path: 'form',
+              builder: (context, state) {
+                final product = state.extra as StoreProduct?;
+                return EcomProductFormPage(product: product);
+              },
+            ),
+          ],
+        ),
+        GoRoute(
+          path: 'categories',
+          builder: (context, state) => const EcomCategoriesPage(),
+        ),
+        GoRoute(
+          path: 'coupons',
+          builder: (context, state) => const EcomCouponsPage(),
+        ),
+        GoRoute(
+          path: 'banners',
+          builder: (context, state) => const EcomBannersPage(),
+        ),
+        GoRoute(
+          path: 'customers',
+          builder: (context, state) => const EcomCustomersPage(),
+        ),
+        GoRoute(
+          path: 'reviews',
+          builder: (context, state) => const EcomReviewsPage(),
+        ),
+        GoRoute(
+          path: 'sync',
+          builder: (context, state) => const EcomSyncPage(),
+        ),
+        GoRoute(
+          path: 'settings',
+          builder: (context, state) => const EcomSettingsPage(),
+        ),
+      ],
     ),
     GoRoute(
       path: '/customers',

@@ -11,3 +11,10 @@ abstract class Failure extends Equatable {
 class CacheFailure extends Failure {
   const CacheFailure(super.message);
 }
+
+/// Something went wrong on the network / backend side (the e-commerce
+/// Supabase link). [message] carries a localization key, never a raw
+/// database error, so it can be shown to a customer as-is.
+class ServerFailure extends Failure {
+  const ServerFailure(super.message);
+}

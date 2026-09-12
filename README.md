@@ -37,12 +37,81 @@ https://github.com/user-attachments/assets/f2d16454-5408-43b3-b207-cd843bbc2c9e
 - **Daily expenses** with categories → real net profit in reports.
 - **Barcode labels** — A4 PDF sticker sheets or thermal label printing for products without a barcode.
 
+## 🛍 E-commerce (Supabase storefront + console)
+
+The same app now runs the shop's **website**: a customer-facing storefront and
+a management console, both reading the site's Supabase project.
+
+```bash
+flutter run \
+  --dart-define=SUPABASE_URL=https://abcdefgh.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=eyJhbGciOi...
+```
+
+Nothing is committed: both values are compile-time constants, and a merchant
+who cannot rebuild can paste them in *E-commerce → Store settings → Connection*
+(stored on the device, and taking precedence over the build-time default).
+An unconfigured link never blocks the POS — the till works exactly as before.
+
+### Two sides, one catalogue
+
+| | |
+|---|---|
+| `/store` | The storefront: hero rail, categories, product page, cart, coupon, cash-on-delivery checkout over the 58 wilayas, order tracking, favourites, saved addresses |
+| `/ecom` | The console: live KPIs, the 7-day revenue chart, the order board, listings, shelf⇄site sync, categories, coupons, banners, reviews, shoppers, shipping and payment settings |
+
+**The join key is the product id.** A listing published from the till keeps the
+POS product's id, so a web order's `product_id` points straight at the shelf.
+That is what lets a delivered web order decrement real stock, and what stops
+the two catalogues drifting apart. The sync screen shows, per product, *why*
+the site differs (missing / price moved / stock moved / renamed) and pushes the
+difference — never touching the photos, description or category the merchant
+wrote on the site.
+
+### Order pipeline
+
+`pending → confirming → confirmed → packing → packed → shipped → delivered`
+(with `cancelled`, `returned`, `refunded` as terminal states). It mirrors the
+site's own back office — a confirmer phones the customer, a packer boxes the
+parcel — and `StoreOrderStatus.fromName` also understands the spellings other
+storefront templates use (`new`, `accepted`, `out_for_delivery`, `completed`…),
+so importing an existing site needs no mapping table.
+
+### Adapting to your site's schema
+
+Table and column names live in **one** file, `lib/core/supabase/store_schema.dart`.
+Tables are getters, so they can be re-pointed at runtime
+(`StoreSchema.applyOverrides({'orders': 'commandes'})`) without a rebuild, and
+`StoreColumns.read` accepts both `snake_case` and `camelCase` spellings.
+The connection screen lists which tables actually exist in the project.
+
+### Monochrome design system
+
+`lib/core/theme/mono_theme.dart` + the `MonoCard / MonoButton / MonoChip /
+MonoPrice / MonoStat / MonoTimeline / MonoBarChart` kit. Pure black `#000` and
+pure white `#FFF`, a neutral grey ramp, 1 px hairline borders, tight radii and
+**no gradients anywhere**. Measured over the module: **66.7% of the colour
+literals are achromatic**, and the only 11 chromatic ones are the error /
+danger / stock semantics.
+
+### Verifying without the Flutter SDK
+
+`flutter analyze` stays the authority, but `tool/check_consistency.py` runs
+anywhere Python does and catches the failures that actually break a build —
+unresolved imports, missing localization keys (including the enum-generated
+families), navigation targets that are not routed, unbalanced delimiters and
+types referenced without being imported:
+
+```bash
+python3 tool/check_consistency.py    # 201 files, 1160 keys, 73 routes
+```
+
 ## 🔒 Privacy & offline guarantees
 
 | | |
 |---|---|
 | Data storage | Hive boxes on the device only |
-| Network calls | none (no HTTP client, no Firebase, no analytics) |
+| Network calls | POS core: none. The optional e-commerce module talks only to your own Supabase project, and only when it is configured |
 | Android permissions | camera + Bluetooth (+ location, required by Android for BT scanning). **No `INTERNET` in release builds** |
 | Moving to a new phone | Settings → Data → export the backup file and import it on the new device |
 
